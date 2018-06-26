@@ -1,52 +1,57 @@
-import PropTypes from 'prop-types';
-import React from 'react';
-import {g, helpers} from '../../common';
-import {getCols, setTitle} from '../util';
-import {DataTable, Dropdown, NewWindowLink, PlayerNameLabels} from '../components';
+import PropTypes from "prop-types";
+import React from "react";
+import { getCols, helpers, setTitle } from "../util";
+import {
+    DataTable,
+    Dropdown,
+    NewWindowLink,
+    PlayerNameLabels,
+} from "../components";
 
-const PlayerFeats = ({abbrev, feats, playoffs, season}) => {
-    setTitle('Statistical Feats');
+const PlayerFeats = ({ abbrev, feats, playoffs, season, userTid }) => {
+    setTitle("Statistical Feats");
 
-    const superCols = [{
-        title: '',
-        colspan: 5,
-    }, {
-        title: 'FG',
-        desc: 'Field Goals',
-        colspan: 3,
-    }, {
-        title: '3PT',
-        desc: 'Three-Pointers',
-        colspan: 3,
-    }, {
-        title: 'FT',
-        desc: 'Free Throws',
-        colspan: 3,
-    }, {
-        title: 'Reb',
-        desc: 'Rebounds',
-        colspan: 3,
-    }, {
-        title: '',
-        colspan: 11,
-    }];
-
-    const cols = getCols('Name', 'Pos', 'Team', 'GS', 'Min', 'M', 'A', '%', 'M', 'A', '%', 'M', 'A', '%', 'Off', 'Def', 'Tot', 'Ast', 'TO', 'Stl', 'Blk', 'PF', 'Pts', 'GmSc', 'Opp', 'Result', 'Season');
+    const cols = getCols(
+        "Name",
+        "Pos",
+        "Team",
+        "GS",
+        "Min",
+        "FG",
+        "FGA",
+        "FG%",
+        "3P",
+        "3PA",
+        "3P%",
+        "FT",
+        "FTA",
+        "FT%",
+        "ORB",
+        "DRB",
+        "TRB",
+        "Ast",
+        "Tov",
+        "Stl",
+        "Blk",
+        "PF",
+        "Pts",
+        "GmSc",
+        "Opp",
+        "Result",
+        "Season",
+    );
 
     const rows = feats.map(p => {
-        const rowAbbrev = g.teamAbbrevsCache[p.tid];
-        const oppAbbrev = g.teamAbbrevsCache[p.oppTid];
-
         return {
             key: p.fid,
             data: [
-                <PlayerNameLabels
-                    injury={p.injury}
-                    pid={p.pid}
-                    watch={p.watch}
-                >{p.name}</PlayerNameLabels>,
+                <PlayerNameLabels injury={p.injury} pid={p.pid} watch={p.watch}>
+                    {p.name}
+                </PlayerNameLabels>,
                 p.pos,
-                <a href={helpers.leagueUrl(["roster", rowAbbrev, p.season])}>{rowAbbrev}</a>,
+                <a href={helpers.leagueUrl(["roster", p.abbrev, p.season])}>
+                    {p.abbrev}
+                </a>,
                 p.stats.gs,
                 p.stats.min.toFixed(1),
                 p.stats.fg,
@@ -68,41 +73,64 @@ const PlayerFeats = ({abbrev, feats, playoffs, season}) => {
                 p.stats.pf,
                 p.stats.pts,
                 helpers.gameScore(p.stats),
-                <a href={helpers.leagueUrl(["roster", oppAbbrev, p.season])}>{oppAbbrev}</a>,
-                <a href={helpers.leagueUrl(["game_log", rowAbbrev, p.season, p.gid])}>{p.won ? 'W' : 'L'} {p.score}</a>,
+                <a href={helpers.leagueUrl(["roster", p.oppAbbrev, p.season])}>
+                    {p.oppAbbrev}
+                </a>,
+                <a
+                    href={helpers.leagueUrl([
+                        "game_log",
+                        p.abbrev,
+                        p.season,
+                        p.gid,
+                    ])}
+                >
+                    {p.won ? "W" : "L"} {p.score}
+                </a>,
                 p.season,
             ],
             classNames: {
-                info: p.tid === g.userTid,
+                info: p.tid === userTid,
             },
         };
     });
 
-    return <div>
-        <Dropdown view="player_feats" fields={["teamsAndAll", "seasonsAndAll", "playoffs"]} values={[abbrev, season, playoffs]} />
-        <h1>Statistical Feats <NewWindowLink /></h1>
+    return (
+        <div>
+            <Dropdown
+                view="player_feats"
+                fields={["teamsAndAll", "seasonsAndAll", "playoffs"]}
+                values={[abbrev, season, playoffs]}
+            />
+            <h1>
+                Statistical Feats <NewWindowLink />
+            </h1>
 
-        <p>All games where a player got a triple double, a 5x5, 50 points, 25 rebounds, 20 assists, 10 steals, 10 blocks, or 10 threes are listed here (if you change game length in God Mode, the cuttoffs are scaled). Statistical feats from your players are <span className="text-info">highlighted in blue</span>.</p>
+            <p>
+                All games where a player got a triple double, a 5x5, 50 points,
+                25 rebounds, 20 assists, 10 steals, 10 blocks, or 10 threes are
+                listed here (if you change game length in God Mode, the cuttoffs
+                are scaled). Statistical feats from your players are{" "}
+                <span className="text-info">highlighted in blue</span>.
+            </p>
 
-        <DataTable
-            cols={cols}
-            defaultSort={[23, 'desc']}
-            name="PlayerFeats"
-            rows={rows}
-            pagination
-            superCols={superCols}
-        />
-    </div>;
+            <DataTable
+                cols={cols}
+                defaultSort={[23, "desc"]}
+                name="PlayerFeats"
+                rows={rows}
+                pagination
+            />
+        </div>
+    );
 };
 
 PlayerFeats.propTypes = {
     abbrev: PropTypes.string.isRequired,
     feats: PropTypes.arrayOf(PropTypes.object).isRequired,
-    playoffs: PropTypes.oneOf(['playoffs', 'regularSeason']).isRequired,
-    season: PropTypes.oneOfType([
-        PropTypes.number,
-        PropTypes.string,
-    ]).isRequired,
+    playoffs: PropTypes.oneOf(["playoffs", "regularSeason"]).isRequired,
+    season: PropTypes.oneOfType([PropTypes.number, PropTypes.string])
+        .isRequired,
+    userTid: PropTypes.number.isRequired,
 };
 
 export default PlayerFeats;

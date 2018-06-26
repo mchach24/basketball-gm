@@ -1,29 +1,78 @@
 // @flow
 
-import PropTypes from 'prop-types';
-import React from 'react';
-import {g} from '../../common';
-import {ads, emitter, realtimeUpdate, toWorker} from '../util';
-import {Footer, Header, LeagueWrapper, MultiTeamMenu, NagModal, NavBar} from '../components';
-import type {GetOutput, Option, PageCtx, UpdateEvents} from '../../common/types';
+import PropTypes from "prop-types";
+import * as React from "react";
+import { Provider } from "unstated";
+import {
+    ads,
+    emitter,
+    local,
+    realtimeUpdate,
+    setTitle,
+    toWorker,
+} from "../util";
+import {
+    Footer,
+    Header,
+    LeagueWrapper,
+    MultiTeamMenu,
+    NagModal,
+    NavBar,
+} from ".";
+import type { GetOutput, PageCtx, UpdateEvents } from "../../common/types";
 
-class LeagueContent extends React.Component {
+type Props = {
+    Component: any,
+    data: any,
+    updating: boolean,
+};
+
+class LeagueContent extends React.Component<Props> {
     // eslint-disable-next-line class-methods-use-this
     shouldComponentUpdate(nextProps) {
         return !nextProps.updating;
     }
 
     render() {
-        const {Component, data, topMenu} = this.props;
+        const { Component, data } = this.props;
 
-        return <Component {...data} topMenu={topMenu} />;
+        return <Component {...data} />;
     }
 }
 
 LeagueContent.propTypes = {
-    Component: PropTypes.func,
-    data: PropTypes.object,
-    topMenu: PropTypes.object,
+    Component: PropTypes.func.isRequired,
+    data: PropTypes.object.isRequired,
+    updating: PropTypes.bool.isRequired,
+};
+
+const showAd = (type: "modal", autoPlaySeasons: number) => {
+    if (type === "modal") {
+        if (!window.enableLogging) {
+            return;
+        }
+
+        if (window.inIframe) {
+            return;
+        }
+
+        // No ads during multi season auto sim
+        if (autoPlaySeasons > 0) {
+            return;
+        }
+
+        // No ads for Gold members
+        if (local.state.gold) {
+            return;
+        }
+
+        const r = Math.random();
+        if (r < 0.96) {
+            ads.showGcs();
+        } else {
+            ads.showModal();
+        }
+    }
 };
 
 type Args = {
@@ -38,37 +87,18 @@ type State = {
     idLoaded?: string,
     idLoading?: string,
     inLeague: boolean,
-    data: {[key: string]: any},
-    multiTeam: {
-        userTid: number,
-        userTids: number[],
-    },
+    data: { [key: string]: any },
     showNagModal: boolean,
-    topMenu: {
-        email?: string,
-        godMode: boolean,
-        goldUntil: number,
-        goldCancelled: boolean,
-        hasViewedALeague: boolean,
-        lid?: number,
-        options: Option[],
-        phaseText: string,
-        popup: boolean,
-        statusText: string,
-        username?: string,
-    },
 };
 
-class Controller extends React.Component {
-    state: State;
+class Controller extends React.Component<{}, State> {
     closeNagModal: Function;
+
     get: Function;
-    setStateData: Function;
-    showAd: Function;
+
     updatePage: Function;
-    updateMultiTeam: Function;
+
     updateState: Function;
-    updateTopMenu: Function;
 
     constructor(props: {}) {
         super(props);
@@ -78,45 +108,22 @@ class Controller extends React.Component {
             idLoading: undefined,
             inLeague: false,
             data: {},
-            multiTeam: {
-                userTid: g.userTid,
-                userTids: g.userTids,
-            },
             showNagModal: false,
-            topMenu: {
-                email: undefined,
-                godMode: !!g.godMode,
-                goldUntil: 0,
-                goldCancelled: false,
-                hasViewedALeague: !!localStorage.getItem('hasViewedALeague'),
-                lid: undefined,
-                options: [],
-                phaseText: '',
-                popup: window.location.search === '?w=popup',
-                statusText: '',
-                username: undefined,
-            },
         };
         this.closeNagModal = this.closeNagModal.bind(this);
         this.get = this.get.bind(this);
-        this.setStateData = this.setStateData.bind(this);
-        this.showAd = this.showAd.bind(this);
         this.updatePage = this.updatePage.bind(this);
-        this.updateMultiTeam = this.updateMultiTeam.bind(this);
         this.updateState = this.updateState.bind(this);
-        this.updateTopMenu = this.updateTopMenu.bind(this);
     }
 
     componentDidMount() {
-        emitter.on('get', this.get);
-        emitter.on('showAd', this.showAd);
-        emitter.on('updateMultiTeam', this.updateMultiTeam);
-        emitter.on('updateState', this.updateState);
-        emitter.on('updateTopMenu', this.updateTopMenu);
+        emitter.on("get", this.get);
+        emitter.on("showAd", showAd);
+        emitter.on("updateState", this.updateState);
 
-        if (this.state.topMenu.popup && document.body) {
+        if (local.state.popup && document.body) {
             if (document.body) {
-                document.body.style.paddingTop = '0';
+                document.body.style.paddingTop = "0";
             }
 
             const css = document.createElement("style");
@@ -129,17 +136,9 @@ class Controller extends React.Component {
     }
 
     componentWillUnmount() {
-        emitter.removeListener('get', this.get);
-        emitter.removeListener('showAd', this.showAd);
-        emitter.removeListener('updateMultiTeam', this.updateMultiTeam);
-        emitter.removeListener('updateState', this.updateState);
-        emitter.removeListener('updateTopMenu', this.updateTopMenu);
-    }
-
-    setStateData(data: {[key: string]: any}) {
-        this.setState({
-            data: Object.assign(this.state.data, data),
-        });
+        emitter.removeListener("get", this.get);
+        emitter.removeListener("showAd", showAd);
+        emitter.removeListener("updateState", this.updateState);
     }
 
     closeNagModal() {
@@ -150,18 +149,39 @@ class Controller extends React.Component {
 
     async get(args: Args, ctx: PageCtx) {
         try {
-            const updateEvents = (ctx !== undefined && ctx.bbgm.updateEvents !== undefined) ? ctx.bbgm.updateEvents : [];
+            const updateEvents =
+                ctx !== undefined && ctx.bbgm.updateEvents !== undefined
+                    ? ctx.bbgm.updateEvents
+                    : [];
             const newLidInt = parseInt(ctx.params.lid, 10);
-            const newLid = isNaN(newLidInt) ? undefined : newLidInt;
+            const newLid = Number.isNaN(newLidInt) ? undefined : newLidInt;
 
-            await (args.inLeague ? toWorker('beforeViewLeague', newLid, this.state.topMenu.lid) : toWorker('beforeViewNonLeague', this.state.topMenu.lid));
-
-            let inputs = args.get(ctx);
-            if (!inputs) {
-                inputs = {};
+            if (args.inLeague) {
+                if (newLid !== local.state.lid) {
+                    await toWorker("beforeViewLeague", newLid, local.state.lid);
+                }
+            } else {
+                // eslint-disable-next-line no-lonely-if
+                if (local.state.lid !== undefined) {
+                    await toWorker("beforeViewNonLeague");
+                    local.updateGameAttributes({
+                        lid: undefined,
+                    });
+                }
             }
 
-            if (typeof inputs.redirectUrl === 'string') {
+            // No good reason for this to be brought back to the UI, since inputs are sent back to the worker below.
+            // ctxBBGM is hacky!
+            const ctxBBGM = Object.assign({}, ctx.bbgm);
+            delete ctxBBGM.cb; // Can't send function to worker
+            delete ctxBBGM.err; // Can't send error to worker
+            const inputs = await toWorker(
+                `processInputs.${args.id}`,
+                ctx.params,
+                ctxBBGM,
+            );
+
+            if (typeof inputs.redirectUrl === "string") {
                 await realtimeUpdate([], inputs.redirectUrl);
             } else {
                 await this.updatePage(args, inputs, updateEvents);
@@ -170,58 +190,35 @@ class Controller extends React.Component {
             ctx.bbgm.err = err;
         }
 
-        if (ctx !== undefined && ctx.bbgm !== undefined && ctx.bbgm.cb !== undefined) {
+        if (
+            ctx !== undefined &&
+            ctx.bbgm !== undefined &&
+            ctx.bbgm.cb !== undefined
+        ) {
             ctx.bbgm.cb();
         }
     }
 
-    showAd(type: 'modal', autoPlaySeasons: number) {
-        if (type === 'modal') {
-            if (!window.enableLogging) {
-                return;
-            }
-
-            // No ads during multi season auto sim
-            if (autoPlaySeasons > 0) {
-                return;
-            }
-
-            // No ads for Gold members
-            const currentTimestamp = Math.floor(Date.now() / 1000);
-            if (currentTimestamp <= this.state.topMenu.goldUntil) {
-                return;
-            }
-
-            const r = Math.random();
-            if (r < 0.68) {
-                ads.showGcs();
-            } else if (r < 0.75) {
-                ads.showModal();
-            } else {
-                // This is all in milliseconds!
-                const adTimer = localStorage.getItem('adTimer') !== undefined ? parseInt(localStorage.getItem('adTimer'), 10) : 0;
-                const now = Date.now();
-
-                // Only show ad once per 60 minutes, at most
-                if (now - adTimer > 1000 * 60 * 60) {
-                    ads.showSurvata();
-                    localStorage.setItem('adTimer', String(now));
-                }
-            }
-        }
-    }
-
-    async updatePage(args: Args, inputs: GetOutput, updateEvents: UpdateEvents) {
+    async updatePage(
+        args: Args,
+        inputs: GetOutput,
+        updateEvents: UpdateEvents,
+    ) {
         let prevData;
 
         // Reset league content and view model only if it's:
         // (1) if it's not loaded and not loading yet
         // (2) loaded, but loading something else
         if (
-            (this.state.idLoaded !== args.id && this.state.idLoading !== args.id) ||
-            (this.state.idLoaded === args.id && this.state.idLoading !== args.id && this.state.idLoading !== undefined)
+            (this.state.idLoaded !== args.id &&
+                this.state.idLoading !== args.id) ||
+            (this.state.idLoaded === args.id &&
+                this.state.idLoading !== args.id &&
+                this.state.idLoading !== undefined)
         ) {
-            updateEvents.push('firstRun');
+            if (!updateEvents.includes("firstRun")) {
+                updateEvents.push("firstRun");
+            }
 
             prevData = {};
         } else if (this.state.idLoading === args.id) {
@@ -236,22 +233,43 @@ class Controller extends React.Component {
         });
 
         // Resolve all the promises before updating the UI to minimize flicker
-        const promiseBefore = toWorker('runBefore', args.id, inputs, updateEvents, prevData);
+        const results = await toWorker(
+            "runBefore",
+            args.id,
+            inputs,
+            updateEvents,
+            prevData,
+        );
 
-        // Run promises in parallel, update when each one is ready
-        // This runs no matter what
-/*        const promisesWhenever = args.runWhenever.map(async (fn) => {
-            // This is a race condition - it assumes this.state.data has been updated by promisesBefore, which will only happen when promisesWhenever are much slower than promisesBefore
-            const vars = await Promise.resolve(fn(inputs, updateEvents, this.state.data, this.setStateData, this.state.topMenu));
-            if (vars !== undefined) {
-                this.setStateData(vars);
+        // If results is undefined, it means the league wasn't loaded yet at the time of the request, likely because another league was opening in another tab at the same time. So stop now and wait until we get a signal that there is a new league.
+        if (results === undefined) {
+            this.setState({
+                idLoading: undefined,
+            });
+            return;
+        }
+
+        let Component = args.Component;
+        for (const result of results) {
+            if (
+                result &&
+                Object.keys(result).length === 1 &&
+                result.hasOwnProperty("errorMessage")
+            ) {
+                Component = ({ errorMessage }: { errorMessage: string }) => {
+                    setTitle("Error");
+                    return (
+                        <div>
+                            <h1>Error</h1>
+                            <h2>{errorMessage}</h2>
+                        </div>
+                    );
+                };
             }
-        });*/
-
-        const results = await promiseBefore;
+        }
 
         const vars = {
-            Component: args.Component,
+            Component,
             inLeague: args.inLeague,
             data: Object.assign(prevData, ...results),
         };
@@ -268,88 +286,76 @@ class Controller extends React.Component {
 
         this.setState(vars);
 
-//        await Promise.all(promisesWhenever);
-
         if (this.state.idLoading === args.id) {
-            this.setState({
-                idLoaded: args.id,
-                idLoading: undefined,
-            }, () => {
-                // Scroll to top
-                if (updateEvents.length === 1 && updateEvents[0] === 'firstRun') {
-                    window.scrollTo(window.pageXOffset, 0);
-                }
-            });
+            this.setState(
+                {
+                    idLoaded: args.id,
+                    idLoading: undefined,
+                },
+                () => {
+                    // Scroll to top
+                    if (
+                        updateEvents.length === 1 &&
+                        updateEvents[0] === "firstRun"
+                    ) {
+                        window.scrollTo(window.pageXOffset, 0);
+                    }
+                },
+            );
         }
-    }
-
-    updateMultiTeam() {
-        this.setState({
-            multiTeam: {
-                userTid: g.userTid,
-                userTids: g.userTids,
-            },
-        });
     }
 
     updateState(obj: State) {
         this.setState(obj);
     }
 
-    updateTopMenu(obj: {
-        email?: string,
-        godMode?: boolean,
-        goldCancelled?: boolean,
-        goldUntil?: number,
-        lid?: number,
-        options?: Option[],
-        phaseText?: string,
-        statusText?: string,
-        username?: string,
-    }) {
-        this.setState({
-            topMenu: Object.assign(this.state.topMenu, obj),
-        });
-    }
-
     render() {
-        const {Component, data, idLoaded, idLoading, inLeague, multiTeam, topMenu} = this.state;
+        const { Component, data, idLoaded, idLoading, inLeague } = this.state;
 
         const updating = idLoading !== undefined;
 
         let contents;
+        let pageId;
         if (!Component) {
-            contents = <h1 style={{textAlign: 'center'}}>Loading...</h1>; // Nice, aligned with splash screen
+            contents = <h1 style={{ textAlign: "center" }}>Loading...</h1>; // Nice, aligned with splash screen
         } else if (!inLeague) {
-            contents = <Component {...data} topMenu={topMenu} />;
+            contents = <Component {...data} />;
         } else {
-            const pageId = idLoading !== undefined ? idLoading : idLoaded;
+            pageId = idLoading !== undefined ? idLoading : idLoaded;
 
-            contents = <div>
-                <LeagueWrapper lid={topMenu.lid} pageId={pageId}>
-                    <LeagueContent
-                        Component={Component}
-                        data={data}
-                        topMenu={topMenu}
-                        updating={updating}
-                    />
-                </LeagueWrapper>
-                <MultiTeamMenu {...multiTeam} />
-            </div>;
+            contents = (
+                <div>
+                    <LeagueWrapper lid={local.state.lid} pageId={pageId}>
+                        <LeagueContent
+                            Component={Component}
+                            data={data}
+                            updating={updating}
+                        />
+                    </LeagueWrapper>
+                    <MultiTeamMenu />
+                </div>
+            );
         }
 
-        return <div className="container">
-            <NavBar {...topMenu} updating={updating} />
-            <Header />
-            <div id="screenshot-nonleague" style={{minHeight: '300px'}}>
-                {contents}
+        return (
+            <div className="container">
+                <Provider>
+                    <NavBar pageId={pageId} updating={updating} />
+                    <Header />
+                    <div
+                        id="screenshot-nonleague"
+                        style={{ minHeight: "300px" }}
+                    >
+                        {contents}
+                    </div>
+                    <Footer />
+                    <NagModal
+                        close={this.closeNagModal}
+                        show={this.state.showNagModal}
+                    />
+                </Provider>
             </div>
-            <Footer />
-            <NagModal
-                close={this.closeNagModal}
-                show={this.state.showNagModal}
-            />
-        </div>;
+        );
     }
 }
 

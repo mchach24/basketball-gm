@@ -1,8 +1,8 @@
 // @flow
 
-import {idb} from '../../db';
-import {mergeByPk} from './helpers';
-import type {Game} from '../../../common/types';
+import { getAll, idb } from "..";
+import { mergeByPk } from "./helpers";
+import type { Game } from "../../../common/types";
 
 const getCopies = async ({
     season,
@@ -11,8 +11,8 @@ const getCopies = async ({
 } = {}): Promise<Game[]> => {
     if (season !== undefined) {
         return mergeByPk(
-            await idb.league.games.index('season').getAll(season),
-            (await idb.cache.games.getAll()).filter((gm) => {
+            await idb.league.games.index("season").getAll(season),
+            (await idb.cache.games.getAll()).filter(gm => {
                 return gm.season === season;
             }),
             idb.cache.storeInfos.games.pk,
@@ -20,7 +20,7 @@ const getCopies = async ({
     }
 
     return mergeByPk(
-        await idb.league.games.getAll(),
+        await getAll(idb.league.games),
         await idb.cache.games.getAll(),
         idb.cache.storeInfos.games.pk,
     );

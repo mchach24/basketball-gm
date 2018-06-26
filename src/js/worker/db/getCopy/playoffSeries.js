@@ -1,10 +1,12 @@
 // @flow
 
-import {g, helpers} from '../../../common';
-import {idb} from '../../db';
-import type {PlayoffSeries} from '../../../common/types';
+import { idb } from "..";
+import { g, helpers } from "../../util";
+import type { PlayoffSeries } from "../../../common/types";
 
-const getCopy = async ({season}: {season: number} = {}): Promise<PlayoffSeries> => {
+const getCopy = async ({ season }: { season: number } = {}): Promise<
+    PlayoffSeries,
+> => {
     if (season === g.season) {
         return helpers.deepCopy(await idb.cache.playoffSeries.get(season));
     }

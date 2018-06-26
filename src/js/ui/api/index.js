@@ -1,24 +1,39 @@
 // @flow
 
-import {g, helpers} from '../../common';
-import {ads, emitter, realtimeUpdate} from '../util';
-import {showEvent} from '../util/logEvent';
-import type {GameAttributes, LogEventShowOptions, UpdateEvents} from '../../common/types';
+import { emitter, local, realtimeUpdate } from "../util";
+import { showEvent } from "../util/logEvent";
+import type {
+    GameAttributes,
+    LocalStateUI,
+    LogEventShowOptions,
+    UpdateEvents,
+} from "../../common/types";
 
 /**
  * Ping a counter at basketball-gm.com.
  *
  * This should only do something if it isn't being run from a unit test and it's actually on basketball-gm.com.
- *
- * @memberOf util.helpers
- * @param {string} type Either "league" for a new league, or "season" for a completed season
  */
-const bbgmPing = (type: 'league' | 'season') => {
-    if (window.enableLogging && window.ga) {
-        if (type === 'league') {
-            window.ga('send', 'event', 'BBGM', 'New league', String(g.lid));
-        } else if (type === 'season') {
-            window.ga('send', 'event', 'BBGM', 'Completed season', String(g.season));
+const bbgmPing = (
+    type: "league" | "season" | "version",
+    arg: number | void,
+) => {
+    if (window.enableLogging && window.gtag) {
+        if (type === "league") {
+            window.gtag("event", "New league", {
+                event_category: "BBGM",
+                event_label: String(arg),
+            });
+        } else if (type === "season") {
+            window.gtag("event", "Completed season", {
+                event_category: "BBGM",
+                event_label: String(arg),
+            });
+        } else if (type === "version") {
+            window.gtag("event", "Version", {
+                event_category: "BBGM",
+                event_label: window.bbgmVersion,
+            });
         }
     }
 };
@@ -31,78 +46,102 @@ const emit = (name: string, content: any) => {
     emitter.emit(name, content);
 };
 
+// Read from goldUntil rather than local because this is called before local is updated
 const initAds = (goldUntil: number | void) => {
+    let hideAds = false;
+
     // No ads for Gold members
     const currentTimestamp = Math.floor(Date.now() / 1000);
-    if (goldUntil === undefined || currentTimestamp > goldUntil) {
-        let el;
-        el = document.getElementById('banner-ad-top-wrapper');
-        if (el) {
-            el.innerHTML = '<div id="div-gpt-ad-1491369323599-3" style="text-align: center; min-height: 95px; margin-top: 1em"></div>';
-        }
-        el = document.getElementById('banner-ad-bottom-wrapper-1');
-        if (el) {
-            el.innerHTML = '<div id="div-gpt-ad-1491369323599-1" style="text-align: center; height: 250px; position: absolute; top: 5px; left: 0"></div>';
-        }
-        el = document.getElementById('banner-ad-bottom-wrapper-2');
-        if (el) {
-            el.innerHTML = '<div id="div-gpt-ad-1491369323599-2" style="text-align: center; height: 250px; position: absolute; top: 5px; right: 0"></div>';
-        }
-        el = document.getElementById('banner-ad-bottom-wrapper-logo');
-        if (el) {
-            el.innerHTML = '<div style="height: 250px; margin: 5px 310px 0 310px; display:flex; align-items: center; justify-content: center;"><img src="https://basketball-gm.com/files/logo.png" style="max-height: 100%; max-width: 100%"></div>';
-        }
-        ads.showBanner();
-    } else {
-        const wrappers = ['banner-ad-top-wrapper', 'banner-ad-bottom-wrapper-1', 'banner-ad-bottom-wrapper-logo', 'banner-ad-bottom-wrapper-2'];
-        for (const wrapper of wrappers) {
-            const el = document.getElementById(wrapper);
-            if (el) {
-                el.innerHTML = '';
+    if (goldUntil === undefined || currentTimestamp < goldUntil) {
+        hideAds = true;
+    }
+
+    // Hide ads on mobile, mobile is shitty enough already
+    if (window.screen && window.screen.width < 768) {
+        hideAds = true;
+    }
+
+    // Embedded iframes too, like on Sports.ws
+    if (window.inIframe) {
+        hideAds = true;
+    }
+
+    // Hide ads on iOS, at least until https://www.wired.com/story/pop-up-mobile-ads-surge-as-sites-scramble-to-stop-them/ is resolved
+    // https://stackoverflow.com/a/9039885/786644
+    if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) {
+        hideAds = true;
+    }
+
+    if (!hideAds) {
+        window.bbgmAds.cmd.push(() => {
+            // Show hidden divs. skyscraper has its own code elsewhere to manage display.
+            const showDivs = [
+                "basketballgm_728x90_320x50_ATF",
+                "basketballgm_300x250_BTF_Left",
+                "basketballgm_300x250_BTF_Right",
+            ];
+            for (const id of showDivs) {
+                const div = document.getElementById(id);
+                if (div) {
+                    div.style.display = "block";
+                }
             }
-        }
+
+            window.bbgmAds
+                .init([
+                    "basketballgm_728x90_320x50_ATF",
+                    "basketballgm_300x250_BTF_Left",
+                    "basketballgm_300x250_BTF_Right",
+                    "basketballgm_300x250_160x600_300x600_Right",
+                ])
+                .then(() => {
+                    // Show the logo too
+                    const logo = document.getElementById("bbgm-ads-logo");
+                    if (logo) {
+                        logo.style.display = "flex";
+                    }
+                });
+        });
     }
 };
 
 // Should only be called from Shared Worker, to move other tabs to new league because only one can be open at a time
 const newLid = async (lid: number) => {
-    const parts = location.pathname.split('/');
+    const parts = window.location.pathname.split("/");
     if (parseInt(parts[2], 10) !== lid) {
         parts[2] = String(lid);
-        const newPathname = parts.join('/');
-        await realtimeUpdate(['firstRun'], newPathname);
-        emitter.emit('updateTopMenu', {lid});
+        const newPathname = parts.join("/");
+        await realtimeUpdate(["firstRun"], newPathname);
+        local.update({ lid });
     }
 };
-
-/*const notifyException = (err: Error, name: string, metadata: any) => {
-    if (window.Bugsnag) {
-        window.Bugsnag.notifyException(err, name, metadata);
-    }
-};*/
 
 const prompt = (message: string, defaultVal?: string) => {
     return window.prompt(message, defaultVal);
 };
 
-async function realtimeUpdate2(updateEvents: UpdateEvents = [], url?: string, raw?: Object) {
+async function realtimeUpdate2(
+    updateEvents: UpdateEvents = [],
+    url?: string,
+    raw?: Object,
+) {
     await realtimeUpdate(updateEvents, url, raw);
 }
 
-const resetG = () => {
-    helpers.resetG();
-
-    // Additionally, here we want to ignore the old lid just to be sure, since the real one will be sent to the UI
-    // later. But in the worker, g.lid is already correctly set, so this can't be in helpers.resetG.
-    g.lid = undefined;
+const resetLeague = () => {
+    local.resetLeague();
 };
 
 const setGameAttributes = (gameAttributes: GameAttributes) => {
-    Object.assign(g, gameAttributes);
+    local.updateGameAttributes(gameAttributes);
 };
 
 const showEvent2 = (options: LogEventShowOptions) => {
     showEvent(options);
+};
+
+const updateLocal = (obj: $Shape<LocalStateUI>) => {
+    local.update(obj);
 };
 
 export default {
@@ -113,7 +152,8 @@ export default {
     newLid,
     prompt,
     realtimeUpdate: realtimeUpdate2,
-    resetG,
+    resetLeague,
     setGameAttributes,
     showEvent: showEvent2,
+    updateLocal,
 };

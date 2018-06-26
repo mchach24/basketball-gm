@@ -7,6 +7,11 @@ body {
   padding-bottom: 20px;
 }
 
+.container {
+  margin-left: unset;
+  margin-right: unset;
+}
+
 footer {
   color: #777;
 }
@@ -264,7 +269,7 @@ ul.dashboard-boxes {
 
     a.league {
       display: block;
-      height: 60px;
+      height: 77px;
       padding: 2px 8px 6px;
       text-align: left;
       width: 151px;
@@ -300,10 +305,19 @@ ul.dashboard-boxes {
       h2 {
         font-size: 20px;
         line-height: 26px;
-        margin-top: 1px;
+        margin-top: 9px;
       }
     }
   }
+}
+
+.dashboard-box-loading {
+  font-weight: bold;
+  margin-top: 26px;
+}
+
+.difficulty-insane-plus {
+  font-weight: bold;
 }
 
 @-moz-keyframes oscillate-bg {
@@ -880,4 +894,51 @@ label input {
 
 .dropdown-toggle {
   cursor: pointer;
+}
+
+/* https://stackoverflow.com/a/49247706/786644 */
+%shorten-col {
+  td, th {
+    position: relative;
+  }
+
+  .shortened-col {
+    overflow: hidden;
+    position: absolute;
+    left: 0;
+    top: 0;
+    padding: 5px;
+    width: 100%;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
+.shorten-col-0 {
+  @extend %shorten-col;
+
+  tr td:not(:nth-child(1)), tr th:not(:nth-child(1)){
+      width: 1%;
+      white-space: nowrap;
+  }
+}
+.shorten-col-1 {
+  @extend %shorten-col;
+
+  tr td:not(:nth-child(2)), tr th:not(:nth-child(2)){
+      width: 1%;
+      white-space: nowrap;
+  }
+}
+
+.skyscraper-wrapper {
+  position: fixed;
+  top: 68px;
+  right: 0px;
+  height: 600px;
+  left: 1170px;
+}
+#bbgm-ads-skyscraper {
+  width: 160px;
+  height: 600px;
+  margin: 0 auto;
 }

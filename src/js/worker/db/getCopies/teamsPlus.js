@@ -1,12 +1,20 @@
 // @flow
 
-import backboard from 'backboard';
-import _ from 'underscore';
-import {g, helpers} from '../../../common';
-import {filterOrderStats, mergeByPk} from './helpers';
-import {team} from '../../core';
-import {idb} from '../../db';
-import type {Team, TeamAttr, TeamFiltered, TeamSeasonAttr, TeamStatAttr, TeamStatType} from '../../../common/types';
+import backboard from "backboard";
+import orderBy from "lodash/orderBy";
+import { mergeByPk } from "./helpers";
+import { team } from "../../core";
+import { idb } from "..";
+import { g, helpers } from "../../util";
+import type {
+    Team,
+    TeamAttr,
+    TeamFiltered,
+    TeamSeasonAttr,
+    TeamStatAttr,
+    TeamStatType,
+    TeamStats,
+} from "../../../common/types";
 
 type TeamOptions = {
     season?: number,
@@ -20,10 +28,15 @@ type TeamOptions = {
 
 const processAttrs = (output: TeamFiltered, t: Team, attrs: TeamAttr[]) => {
     for (const attr of attrs) {
-        if (attr === 'budget') {
+        if (attr === "budget") {
             output.budget = helpers.deepCopy(t.budget);
             for (const [key, value] of Object.entries(output.budget)) {
-                if (key !== 'ticketPrice' && value && typeof value.amount === 'number') { // ticketPrice is the only thing in dollars always
+                if (
+                    key !== "ticketPrice" &&
+                    value &&
+                    typeof value.amount === "number"
+                ) {
+                    // ticketPrice is the only thing in dollars always
                     value.amount /= 1000;
                 }
             }
@@ -33,79 +46,157 @@ const processAttrs = (output: TeamFiltered, t: Team, attrs: TeamAttr[]) => {
     }
 };
 
-const processSeasonAttrs = async (output: TeamFiltered, t: Team, seasonAttrs: TeamSeasonAttr[], season: number | void) => {
+const processSeasonAttrs = async (
+    output: TeamFiltered,
+    t: Team,
+    seasonAttrs: TeamSeasonAttr[],
+    season: number | void,
+) => {
     let seasons;
     if (season === undefined) {
         // All seasons
         seasons = mergeByPk(
-            await idb.league.teamSeasons.index('tid, season').getAll(backboard.bound([t.tid], [t.tid, ''])),
-            await idb.cache.teamSeasons.indexGetAll('teamSeasonsByTidSeason', [`${t.tid}`, `${t.tid},Z`]),
+            await idb.league.teamSeasons
+                .index("tid, season")
+                .getAll(backboard.bound([t.tid], [t.tid, ""])),
+            await idb.cache.teamSeasons.indexGetAll("teamSeasonsByTidSeason", [
+                `${t.tid}`,
+                `${t.tid},Z`,
+            ]),
             idb.cache.storeInfos.teamSeasons.pk,
         );
     } else if (season >= g.season - 2) {
         // Single season, from cache
-        seasons = await idb.cache.teamSeasons.indexGetAll('teamSeasonsBySeasonTid', `${season},${t.tid}`);
+        seasons = await idb.cache.teamSeasons.indexGetAll(
+            "teamSeasonsBySeasonTid",
+            `${season},${t.tid}`,
+        );
     } else {
         // Single season, from database
-        seasons = await idb.league.teamSeasons.index('season, tid').getAll([season, t.tid]);
+        seasons = await idb.league.teamSeasons
+            .index("season, tid")
+            .getAll([season, t.tid]);
     }
 
-    output.seasonAttrs = await Promise.all(seasons.map(async (ts) => {
-        const row = {};
+    // If a season is requested but not in the database, make a fake season so at least some dummy values are returned
+    if (season !== undefined && seasons.length === 0) {
+        const dummySeason = team.genSeasonRow(t.tid);
+        dummySeason.season = season;
+        seasons = [dummySeason];
+    }
 
-        // Revenue and expenses calculation
-        const revenue = _.reduce(helpers.deepCopy(ts.revenues), (memo, rev) => memo + rev.amount, 0);
-        const expense = _.reduce(helpers.deepCopy(ts.expenses), (memo, exp) => memo + exp.amount, 0);
+    output.seasonAttrs = await Promise.all(
+        seasons.map(async ts => {
+            const row = {};
 
-        for (const attr of seasonAttrs) {
-            if (attr === 'winp') {
-                row.winp = 0;
-                if (ts.won + ts.lost > 0) {
-                    row.winp = ts.won / (ts.won + ts.lost);
-                }
-            } else if (attr === 'att') {
-                row.att = 0;
-                if (!ts.hasOwnProperty('gpHome')) { ts.gpHome = Math.round(ts.gp / 2); } // See also game.js and teamFinances.js
-                if (ts.gpHome > 0) {
-                    row.att = ts.att / ts.gpHome;
-                }
-            } else if (attr === 'cash') {
-                row.cash = ts.cash / 1000; // [millions of dollars]
-            } else if (attr === 'revenue') {
-                row.revenue = revenue / 1000; // [millions of dollars]
-            } else if (attr === 'profit') {
-                row.profit = (revenue - expense) / 1000; // [millions of dollars]
-            } else if (attr === 'salaryPaid') {
-                row.salaryPaid = ts.expenses.salary.amount / 1000; // [millions of dollars]
-            } else if (attr === 'payroll') {
-                if (season === g.season) {
-                    row.payroll = ((await team.getPayroll(t.tid))[0]) / 1000;
+            // Revenue and expenses calculation
+            const revenue = Object.keys(ts.revenues).reduce(
+                (memo, rev) => memo + ts.revenues[rev].amount,
+                0,
+            );
+            const expense = Object.keys(ts.expenses).reduce(
+                (memo, rev) => memo + ts.expenses[rev].amount,
+                0,
+            );
+
+            for (const attr of seasonAttrs) {
+                if (attr === "winp") {
+                    row.winp = 0;
+                    if (ts.won + ts.lost > 0) {
+                        row.winp = ts.won / (ts.won + ts.lost);
+                    }
+                } else if (attr === "att") {
+                    row.att = 0;
+                    if (!ts.hasOwnProperty("gpHome")) {
+                        ts.gpHome = Math.round(ts.gp / 2);
+                    } // See also game.js and teamFinances.js
+                    if (ts.gpHome > 0) {
+                        row.att = ts.att / ts.gpHome;
+                    }
+                } else if (attr === "cash") {
+                    row.cash = ts.cash / 1000; // [millions of dollars]
+                } else if (attr === "revenue") {
+                    row.revenue = revenue / 1000; // [millions of dollars]
+                } else if (attr === "profit") {
+                    row.profit = (revenue - expense) / 1000; // [millions of dollars]
+                } else if (attr === "salaryPaid") {
+                    row.salaryPaid = ts.expenses.salary.amount / 1000; // [millions of dollars]
+                } else if (attr === "payroll") {
+                    if (season === g.season) {
+                        row.payroll = (await team.getPayroll(t.tid)) / 1000;
+                    } else {
+                        row.payroll = undefined;
+                    }
+                } else if (attr === "lastTen") {
+                    const lastTenWon = ts.lastTen.reduce(
+                        (memo, num) => memo + num,
+                        0,
+                    );
+                    const lastTenLost = ts.lastTen.length - lastTenWon;
+                    row.lastTen = `${lastTenWon}-${lastTenLost}`;
+                } else if (attr === "streak") {
+                    // For standings
+                    if (ts.streak === 0) {
+                        row.streak = "None";
+                    } else if (ts.streak > 0) {
+                        row.streak = `Won ${ts.streak}`;
+                    } else if (ts.streak < 0) {
+                        row.streak = `Lost ${Math.abs(ts.streak)}`;
+                    }
                 } else {
-                    row.payroll = undefined;
+                    row[attr] = ts[attr];
                 }
-            } else if (attr === 'lastTen') {
-                const lastTenWon = ts.lastTen.reduce((memo, num) => memo + num, 0);
-                const lastTenLost = ts.lastTen.length - lastTenWon;
-                row.lastTen = `${lastTenWon}-${lastTenLost}`;
-            } else if (attr === 'streak') {  // For standings
-                if (ts.streak === 0) {
-                    row.streak = 'None';
-                } else if (ts.streak > 0) {
-                    row.streak = `Won ${ts.streak}`;
-                } else if (ts.streak < 0) {
-                    row.streak = `Lost ${Math.abs(ts.streak)}`;
-                }
-            } else {
-                row[attr] = ts[attr];
             }
-        }
 
-        return row;
-    }));
+            return row;
+        }),
+    );
 
     if (season !== undefined) {
         output.seasonAttrs = output.seasonAttrs[0];
     }
+};
+
+// Possessions estimate, from https://www.basketball-reference.com/about/glossary.html#poss
+const poss = ts => {
+    if (ts.orb + ts.oppDrb > 0 && ts.oppOrb + ts.drb > 0) {
+        return (
+            0.5 *
+            (ts.fga +
+                0.4 * ts.fta -
+                1.07 * (ts.orb / (ts.orb + ts.oppDrb)) * (ts.fga - ts.fg) +
+                ts.tov +
+                (ts.oppFga +
+                    0.4 * ts.oppFta -
+                    1.07 *
+                        (ts.oppOrb / (ts.oppOrb + ts.drb)) *
+                        (ts.oppFga - ts.oppFg) +
+                    ts.oppTov))
+        );
+    }
+    return 0;
+};
+
+// Indexes can't handle playoffs/regularSeason and different ones can come back inconsistently sorted
+const filterOrderStats = (
+    stats: TeamStats[],
+    playoffs: boolean,
+    regularSeason: boolean,
+): TeamStats[] => {
+    return orderBy(
+        helpers.deepCopy(
+            stats.filter(ts => {
+                if (playoffs && ts.playoffs) {
+                    return true;
+                }
+                if (regularSeason && !ts.playoffs) {
+                    return true;
+                }
+                return false;
+            }),
+        ),
+        ["season", "playoffs", "rid"],
+    );
 };
 
 const processStats = async (
@@ -123,10 +214,20 @@ const processStats = async (
         // Single season, from cache
         let teamStats2 = [];
         if (regularSeason) {
-            teamStats2 = teamStats2.concat(await idb.cache.teamStats.indexGetAll('teamStatsByPlayoffsTid', `0,${t.tid}`));
+            teamStats2 = teamStats2.concat(
+                await idb.cache.teamStats.indexGetAll(
+                    "teamStatsByPlayoffsTid",
+                    `false,${t.tid}`,
+                ),
+            );
         }
         if (playoffs) {
-            teamStats2 = teamStats2.concat(await idb.cache.teamStats.indexGetAll('teamStatsByPlayoffsTid', `1,${t.tid}`));
+            teamStats2 = teamStats2.concat(
+                await idb.cache.teamStats.indexGetAll(
+                    "teamStatsByPlayoffsTid",
+                    `true,${t.tid}`,
+                ),
+            );
         }
 
         return teamStats2;
@@ -135,7 +236,7 @@ const processStats = async (
     if (season === undefined) {
         // All seasons
         teamStats = mergeByPk(
-            await idb.league.teamStats.index('tid').getAll(t.tid),
+            await idb.league.teamStats.index("tid").getAll(t.tid),
             await teamStatsFromCache(),
             idb.cache.storeInfos.teamStats.pk,
         );
@@ -143,7 +244,9 @@ const processStats = async (
         teamStats = await teamStatsFromCache();
     } else {
         // Single season, from database
-        teamStats = await idb.league.teamStats.index('season, tid').getAll([season, t.tid]);
+        teamStats = await idb.league.teamStats
+            .index("season, tid")
+            .getAll([season, t.tid]);
     }
 
     // Handle playoffs/regularSeason
@@ -153,66 +256,189 @@ const processStats = async (
         teamStats.push({});
     }
 
-    output.stats = teamStats.map((ts) => {
+    output.stats = teamStats.map(ts => {
         const row = {};
 
         if (ts.gp > 0) {
             for (const stat of stats) {
-                if (stat === 'gp') {
+                if (stat === "gp") {
                     row.gp = ts.gp;
-                } else if (stat === 'fgp') {
+                } else if (stat === "fgp") {
                     if (ts.fga > 0) {
-                        row.fgp = 100 * ts.fg / ts.fga;
+                        row.fgp = (100 * ts.fg) / ts.fga;
                     } else {
                         row.fgp = 0;
                     }
-                } else if (stat === 'fgpAtRim') {
+                } else if (stat === "oppFgp") {
+                    if (ts.oppFga > 0) {
+                        row.oppFgp = (100 * ts.oppFg) / ts.oppFga;
+                    } else {
+                        row.oppFgp = 0;
+                    }
+                } else if (stat === "fgpAtRim") {
                     if (ts.fgaAtRim > 0) {
-                        row.fgpAtRim = 100 * ts.fgAtRim / ts.fgaAtRim;
+                        row.fgpAtRim = (100 * ts.fgAtRim) / ts.fgaAtRim;
                     } else {
                         row.fgpAtRim = 0;
                     }
-                } else if (stat === 'fgpLowPost') {
+                } else if (stat === "oppFgpAtRim") {
+                    if (ts.oppFgaAtRim > 0) {
+                        row.oppFgpAtRim =
+                            (100 * ts.oppFgAtRim) / ts.oppFgaAtRim;
+                    } else {
+                        row.oppFgpAtRim = 0;
+                    }
+                } else if (stat === "fgpLowPost") {
                     if (ts.fgaLowPost > 0) {
-                        row.fgpLowPost = 100 * ts.fgLowPost / ts.fgaLowPost;
+                        row.fgpLowPost = (100 * ts.fgLowPost) / ts.fgaLowPost;
                     } else {
                         row.fgpLowPost = 0;
                     }
-                } else if (stat === 'fgpMidRange') {
+                } else if (stat === "oppFgpLowPost") {
+                    if (ts.oppFgaLowPost > 0) {
+                        row.oppFgpLowPost =
+                            (100 * ts.oppFgLowPost) / ts.oppFgaLowPost;
+                    } else {
+                        row.oppFgpLowPost = 0;
+                    }
+                } else if (stat === "fgpMidRange") {
                     if (ts.fgaMidRange > 0) {
-                        row.fgpMidRange = 100 * ts.fgMidRange / ts.fgaMidRange;
+                        row.fgpMidRange =
+                            (100 * ts.fgMidRange) / ts.fgaMidRange;
                     } else {
                         row.fgpMidRange = 0;
                     }
-                } else if (stat === 'tpp') {
+                } else if (stat === "oppFgpMidRange") {
+                    if (ts.oppFgaMidRange > 0) {
+                        row.oppFgpMidRange =
+                            (100 * ts.oppFgMidRange) / ts.oppFgaMidRange;
+                    } else {
+                        row.oppFgpMidRange = 0;
+                    }
+                } else if (stat === "tpp") {
                     if (ts.tpa > 0) {
-                        row.tpp = 100 * ts.tp / ts.tpa;
+                        row.tpp = (100 * ts.tp) / ts.tpa;
                     } else {
                         row.tpp = 0;
                     }
-                } else if (stat === 'ftp') {
+                } else if (stat === "oppTpp") {
+                    if (ts.oppTpa > 0) {
+                        row.oppTpp = (100 * ts.oppTp) / ts.oppTpa;
+                    } else {
+                        row.oppTpp = 0;
+                    }
+                } else if (stat === "ftp") {
                     if (ts.fta > 0) {
-                        row.ftp = 100 * ts.ft / ts.fta;
+                        row.ftp = (100 * ts.ft) / ts.fta;
                     } else {
                         row.ftp = 0;
                     }
-                } else if (stat === 'diff') {
-                    if (statType === 'totals') {
-                        row.diff = ts.pts - ts.oppPts;
+                } else if (stat === "oppFtp") {
+                    if (ts.oppFta > 0) {
+                        row.oppFtp = (100 * ts.oppFt) / ts.oppFta;
                     } else {
-                        row.diff = (ts.pts - ts.oppPts) / ts.gp;
+                        row.oppFtp = 0;
                     }
-                } else if (stat === 'season' || stat === 'playoffs') {
+                } else if (stat === "mov") {
+                    if (statType === "totals") {
+                        row.mov = ts.pts - ts.oppPts;
+                    } else if (ts.gp > 0) {
+                        row.mov = (ts.pts - ts.oppPts) / ts.gp;
+                    } else {
+                        row.mov = 0;
+                    }
+                } else if (stat === "oppMov") {
+                    if (statType === "totals") {
+                        row.oppMov = ts.oppPts - ts.pts;
+                    } else if (ts.gp > 0) {
+                        row.oppMov = (ts.oppPts - ts.pts) / ts.gp;
+                    } else {
+                        row.oppMov = 0;
+                    }
+                } else if (stat === "pw") {
+                    if (ts.pts > 0 || ts.oppPts > 0) {
+                        row.pw =
+                            ts.gp *
+                            (ts.pts ** 14 / (ts.pts ** 14 + ts.oppPts ** 14));
+                    } else {
+                        row.pw = 0;
+                    }
+                } else if (stat === "pl") {
+                    if (ts.pts > 0 || ts.oppPts > 0) {
+                        row.pl =
+                            ts.gp -
+                            ts.gp *
+                                (ts.pts ** 14 /
+                                    (ts.pts ** 14 + ts.oppPts ** 14));
+                    } else {
+                        row.pl = 0;
+                    }
+                } else if (stat === "ortg") {
+                    const possessions = poss(ts);
+                    if (possessions > 0) {
+                        row.ortg = (100 * ts.pts) / possessions;
+                    } else {
+                        row.ortg = 0;
+                    }
+                } else if (stat === "drtg") {
+                    const possessions = poss(ts);
+                    if (possessions > 0) {
+                        row.drtg = (100 * ts.oppPts) / possessions;
+                    } else {
+                        row.drtg = 0;
+                    }
+                } else if (stat === "nrtg") {
+                    const possessions = poss(ts);
+                    if (possessions > 0) {
+                        row.nrtg = (100 * (ts.pts - ts.oppPts)) / possessions;
+                    } else {
+                        row.nrtg = 0;
+                    }
+                } else if (stat === "pace") {
+                    if (ts.min > 0) {
+                        row.pace =
+                            (g.quarterLength * 4 * poss(ts)) / (ts.min / 5);
+                    } else {
+                        row.pace = 0;
+                    }
+                } else if (stat === "poss") {
+                    row.poss = poss(ts);
+                } else if (stat === "tpar") {
+                    if (ts.fga > 0) {
+                        row.tpar = (100 * ts.tpa) / ts.fga;
+                    } else {
+                        row.tpar = 0;
+                    }
+                } else if (stat === "ftr") {
+                    if (ts.fga > 0) {
+                        row.ftr = (100 * ts.fta) / ts.fga;
+                    } else {
+                        row.ftr = 0;
+                    }
+                } else if (stat === "season" || stat === "playoffs") {
                     row[stat] = ts[stat];
-                } else if (statType === 'totals') {
-                    row[stat] = ts[stat];
+                } else if (statType === "totals") {
+                    if (stat === "trb") {
+                        row.trb = ts.drb + ts.orb;
+                    } else if (stat === "oppTrb") {
+                        row.oppTrb = ts.oppDrb + ts.oppOrb;
+                    } else {
+                        row[stat] = ts[stat];
+                    }
                 } else {
-                    row[stat] = ts[stat] / ts.gp;
+                    // eslint-disable-next-line no-lonely-if
+                    if (stat === "trb") {
+                        row.trb = (ts.drb + ts.orb) / ts.gp;
+                    } else if (stat === "oppTrb") {
+                        row.oppTrb = (ts.oppDrb + ts.oppOrb) / ts.gp;
+                    } else {
+                        row[stat] = ts[stat] / ts.gp;
+                    }
                 }
             }
         } else {
             for (const stat of stats) {
-                if (stat === 'season' || stat === 'playoffs') {
+                if (stat === "season" || stat === "playoffs") {
                     row[stat] = ts[stat];
                 } else {
                     row[stat] = 0;
@@ -226,20 +452,26 @@ const processStats = async (
         return row;
     });
 
-    if (season !== undefined && ((playoffs && !regularSeason) || (!playoffs && regularSeason))) {
+    if (
+        season !== undefined &&
+        ((playoffs && !regularSeason) || (!playoffs && regularSeason))
+    ) {
         output.stats = output.stats[0];
     }
 };
 
-const processTeam = async (t: Team, {
-    season,
-    attrs,
-    seasonAttrs,
-    stats,
-    playoffs,
-    regularSeason,
-    statType,
-}: TeamOptions) => {
+const processTeam = async (
+    t: Team,
+    {
+        season,
+        attrs,
+        seasonAttrs,
+        stats,
+        playoffs,
+        regularSeason,
+        statType,
+    }: TeamOptions,
+) => {
     const output = {};
 
     if (attrs.length > 0) {
@@ -253,7 +485,17 @@ const processTeam = async (t: Team, {
     }
 
     if (stats.length > 0) {
-        promises.push(processStats(output, t, stats, playoffs, regularSeason, statType, season));
+        promises.push(
+            processStats(
+                output,
+                t,
+                stats,
+                playoffs,
+                regularSeason,
+                statType,
+                season,
+            ),
+        );
     }
 
     await Promise.all(promises);
@@ -287,7 +529,7 @@ const getCopies = async ({
     stats = [],
     playoffs = false,
     regularSeason = true,
-    statType = 'perGame',
+    statType = "perGame",
 }: {
     tid?: number,
     season?: number,
@@ -310,16 +552,19 @@ const getCopies = async ({
 
     // Does this require IDB?
     const objectStores = [];
-    if (seasonAttrs.length > 0 && (season === undefined || season < g.season - 2)) {
-        objectStores.push('teamSeasons');
+    if (
+        seasonAttrs.length > 0 &&
+        (season === undefined || season < g.season - 2)
+    ) {
+        objectStores.push("teamSeasons");
     }
     if (stats.length > 0 && season !== g.season) {
-        objectStores.push('teamStats');
+        objectStores.push("teamStats");
     }
 
     if (tid === undefined) {
         const teams = await idb.cache.teams.getAll();
-        return Promise.all(teams.map((t) => processTeam(t, options)));
+        return Promise.all(teams.map(t => processTeam(t, options)));
     }
 
     const t = await idb.cache.teams.get(tid);

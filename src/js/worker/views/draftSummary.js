@@ -1,20 +1,29 @@
 // @flow
 
-import {PLAYER, g} from '../../common';
-import {idb} from '../db';
+import { PLAYER } from "../../common";
+import { idb } from "../db";
+import { g } from "../util";
 
-async function updateDraftSummary(
-    inputs: {season: number},
-): void | {[key: string]: any} {
+async function updateDraftSummary(inputs: {
+    season: number,
+}): void | { [key: string]: any } {
     // Update every time because anything could change this (unless all players from class are retired)
     let playersAll;
     if (g.season === inputs.season) {
         // This is guaranteed to work (ignoring God Mode) because no player this season has had a chance to die or retire
-        playersAll = await idb.cache.players.indexGetAll('playersByTid', [0, Infinity]);
+        playersAll = await idb.cache.players.indexGetAll("playersByTid", [
+            0,
+            Infinity,
+        ]);
     } else {
-        playersAll = await idb.getCopies.players({draftYear: inputs.season});
+        playersAll = await idb.getCopies.players({ draftYear: inputs.season });
     }
-    playersAll = playersAll.filter((p) => p.draft.year === inputs.season);
+    playersAll = playersAll.filter(p => {
+        return (
+            p.draft.year === inputs.season &&
+            (p.draft.round === 1 || p.draft.round === 2)
+        );
+    });
     playersAll = await idb.getCopies.playersPlus(playersAll, {
         attrs: ["tid", "abbrev", "draft", "pid", "name", "age", "hof"],
         ratings: ["ovr", "pot", "skills", "pos"],
@@ -24,37 +33,33 @@ async function updateDraftSummary(
         fuzz: true,
     });
 
-    const players = [];
-    for (let i = 0; i < playersAll.length; i++) {
-        const pa = playersAll[i];
+    const players = playersAll.map(p => {
+        const currentPr = p.ratings[p.ratings.length - 1];
 
-        if (pa.draft.round === 1 || pa.draft.round === 2) {
-            const currentPr = pa.ratings[pa.ratings.length - 1];
+        return {
+            // Attributes
+            pid: p.pid,
+            name: p.name,
+            draft: p.draft,
+            currentAge: p.age,
+            currentAbbrev: p.abbrev,
+            hof: p.hof,
 
-            players.push({
-                // Attributes
-                pid: pa.pid,
-                name: pa.name,
-                draft: pa.draft,
-                currentAge: pa.age,
-                currentAbbrev: pa.abbrev,
-                hof: pa.hof,
+            // Ratings
+            currentOvr: p.tid !== PLAYER.RETIRED ? currentPr.ovr : null,
+            currentPot: p.tid !== PLAYER.RETIRED ? currentPr.pot : null,
+            currentSkills: p.tid !== PLAYER.RETIRED ? currentPr.skills : [],
+            pos: currentPr.pos,
 
-                // Ratings
-                currentOvr: pa.tid !== PLAYER.RETIRED ? currentPr.ovr : null,
-                currentPot: pa.tid !== PLAYER.RETIRED ? currentPr.pot : null,
-                currentSkills: pa.tid !== PLAYER.RETIRED ? currentPr.skills : [],
-                pos: currentPr.pos,
-
-                // Stats
-                careerStats: pa.careerStats,
-            });
-        }
-    }
+            // Stats
+            careerStats: p.careerStats,
+        };
+    });
 
     return {
         players,
         season: inputs.season,
+        userTid: g.userTid,
     };
 }
 

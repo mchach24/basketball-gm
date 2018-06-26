@@ -2,9 +2,17 @@ Don't read much into the release dates. Changes are pushed live as often as
 possible, regardless of whether I make an official release with a new version
 number or not.
 
-# 4.0.0 (2017-04-01)
+# 4.1.0 (in progress)
 
-- Previously, the version number was incremented when the previous version was done, and then the date was assigned for the previous version then. Now, the version and date will be assigned at the same time, and then features and improvements will gradualyl be added to the version.
+## Gameplay and UI
+
+- [Major changes to player ratings and development](https://basketball-gm.com/blog/2018/02/player-ratings-and-development-beta/)
+- [Performance improvements in large leagues](https://basketball-gm.com/blog/2018/04/performance-improvements-in-large-leagues/)
+- [Relatives - fathers, sons, and brothers](https://basketball-gm.com/blog/2018/05/relatives-fathers-sons-and-brothers/)
+- [Draft day trades](https://basketball-gm.com/blog/2018/05/draft-day-trades/)
+- [Option to change difficulty level](https://basketball-gm.com/blog/2018/06/difficulty-levels/)
+
+# 4.0.0 (2018-03-07)
 
 ## Gameplay and UI
 
@@ -14,6 +22,7 @@ number or not.
 - New Options screen
 - Sometimes young players (particularly from certain countries) will fake their ages
 - The draft lottery is viewable live
+- A lot more advanced stats, viewable from Team Stats, Player Stats, and Player pages
 
 ## Technical details
 

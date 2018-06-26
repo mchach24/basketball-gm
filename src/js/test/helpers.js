@@ -1,10 +1,29 @@
 // @flow
 
-import {g, helpers} from '../common';
-import {idb, Cache} from '../worker/db';
-import {STORES} from '../worker/db/Cache';
-import {defaultGameAttributes} from '../worker/util';
-import type {Store} from '../worker/db/Cache';
+import { idb, Cache } from "../worker/db";
+import { STORES } from "../worker/db/Cache";
+import { defaultGameAttributes, g, helpers } from "../worker/util";
+import type { Store } from "../worker/db/Cache";
+
+const mockIDBLeague = (): any => {
+    const league = {};
+    for (const store of STORES) {
+        league[store] = {
+            getAll() {
+                return [];
+            },
+            index() {
+                return {
+                    getAll() {
+                        return [];
+                    },
+                };
+            },
+        };
+    }
+
+    return league;
+};
 
 /**
  * Finds the number of times an element appears in an array.
@@ -24,7 +43,7 @@ function numInArrayEqualTo<T>(array: T[], x: T): number {
     return n;
 }
 
-const resetCache = async (data?: {[key: Store]: any[]}) => {
+const resetCache = async (data?: { [key: Store]: any[] }) => {
     idb.cache = new Cache();
 
     // We want these to do nothing while testing, usually
@@ -34,14 +53,14 @@ const resetCache = async (data?: {[key: Store]: any[]}) => {
     idb.cache.flush = async () => {};
 
     for (const store of STORES) {
+        // This stuff is all needed because a real Cache.fill is not called.
         idb.cache._data[store] = {};
         idb.cache._deletes[store] = new Set();
         idb.cache._dirtyRecords[store] = new Set();
         idb.cache._maxIds[store] = -1;
-
-        idb.cache.markDirtyIndexes(store);
+        idb.cache._markDirtyIndexes(store);
     }
-    idb.cache._status = 'full';
+    idb.cache._status = "full";
 
     if (!data) {
         return;
@@ -51,9 +70,19 @@ const resetCache = async (data?: {[key: Store]: any[]}) => {
             await idb.cache.players.add(obj);
         }
     }
+    if (data.teams) {
+        for (const obj of data.teams) {
+            await idb.cache.teams.add(obj);
+        }
+    }
     if (data.teamSeasons) {
         for (const obj of data.teamSeasons) {
             await idb.cache.teamSeasons.add(obj);
+        }
+    }
+    if (data.teamStats) {
+        for (const obj of data.teamStats) {
+            await idb.cache.teamStats.add(obj);
         }
     }
     if (data.trade) {
@@ -72,7 +101,7 @@ const resetG = () => {
         userTids: [0],
         season,
         startingSeason: season,
-        leagueName: '',
+        leagueName: "",
         teamAbbrevsCache: teams.map(t => t.abbrev),
         teamRegionsCache: teams.map(t => t.region),
         teamNamesCache: teams.map(t => t.name),
@@ -82,6 +111,7 @@ const resetG = () => {
 };
 
 export default {
+    mockIDBLeague,
     numInArrayEqualTo,
     resetCache,
     resetG,

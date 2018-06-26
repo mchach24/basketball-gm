@@ -1,7 +1,7 @@
-import _ from 'underscore';
-import {g} from '../../common';
-import {idb} from '../db';
-import type {UpdateEvents} from '../../common/types';
+import range from "lodash/range";
+import { idb } from "../db";
+import { g, helpers } from "../util";
+import type { UpdateEvents } from "../../common/types";
 
 function getTeamRecord(t, awards) {
     let totalWon = 0;
@@ -27,7 +27,8 @@ function getTeamRecord(t, awards) {
         }
     }
 
-    const totalWP = totalWon > 0 ? (totalWon / (totalWon + totalLost)).toFixed(3) : '0.000';
+    const totalWP =
+        totalWon > 0 ? (totalWon / (totalWon + totalLost)).toFixed(3) : "0.000";
 
     return {
         id: t.tid,
@@ -46,20 +47,20 @@ function getTeamRecord(t, awards) {
         championships,
         lastChampionship,
         finals,
-        mvp: awards[t.tid].mvp,
-        dpoy: awards[t.tid].dpoy,
-        smoy: awards[t.tid].smoy,
-        roy: awards[t.tid].roy,
-        bestRecord: awards[t.tid].bestRecord,
-        bestRecordConf: awards[t.tid].bestRecordConf,
-        allRookie: awards[t.tid].allRookie,
-        allLeague: awards[t.tid].allLeagueTotal,
-        allDefense: awards[t.tid].allDefenseTotal,
+        mvp: awards[t.tid] ? awards[t.tid].mvp : 0,
+        dpoy: awards[t.tid] ? awards[t.tid].dpoy : 0,
+        smoy: awards[t.tid] ? awards[t.tid].smoy : 0,
+        roy: awards[t.tid] ? awards[t.tid].roy : 0,
+        bestRecord: awards[t.tid] ? awards[t.tid].bestRecord : 0,
+        bestRecordConf: awards[t.tid] ? awards[t.tid].bestRecordConf : 0,
+        allRookie: awards[t.tid] ? awards[t.tid].allRookie : 0,
+        allLeague: awards[t.tid] ? awards[t.tid].allLeagueTotal : 0,
+        allDefense: awards[t.tid] ? awards[t.tid].allDefenseTotal : 0,
     };
 }
 
 function tallyAwards(awards) {
-    const teams = _.range(g.numTeams).map(() => {
+    const teams = range(g.numTeams).map(() => {
         return {
             mvp: 0,
             dpoy: 0,
@@ -75,28 +76,55 @@ function tallyAwards(awards) {
         };
     });
 
-    awards.forEach(a => {
-        teams[a.mvp.tid].mvp++;
-        teams[a.dpoy.tid].dpoy++;
-        teams[a.smoy.tid].smoy++;
-        teams[a.roy.tid].roy++;
+    for (const a of awards) {
+        if (!a) {
+            continue;
+        }
+
+        if (teams[a.mvp.tid]) {
+            teams[a.mvp.tid].mvp++;
+        }
+        if (teams[a.dpoy.tid]) {
+            teams[a.dpoy.tid].dpoy++;
+        }
+        if (teams[a.smoy.tid]) {
+            teams[a.smoy.tid].smoy++;
+        }
+        if (teams[a.roy.tid]) {
+            teams[a.roy.tid].roy++;
+        }
         if (a.bre && a.brw) {
             // For old league files, this format is obsolete now
-            teams[a.bre.tid].bestRecordConf++;
-            teams[a.brw.tid].bestRecordConf++;
+            if (teams[a.bre.tid]) {
+                teams[a.bre.tid].bestRecordConf++;
+            }
+            if (teams[a.brw.tid]) {
+                teams[a.brw.tid].bestRecordConf++;
+            }
             if (a.bre.won >= a.brw.won) {
-                teams[a.bre.tid].bestRecord++;
+                if (teams[a.bre.tid]) {
+                    teams[a.bre.tid].bestRecord++;
+                }
             } else {
-                teams[a.brw.tid].bestRecord++;
+                // eslint-disable-next-line no-lonely-if
+                if (teams[a.brw.tid]) {
+                    teams[a.brw.tid].bestRecord++;
+                }
             }
         } else {
             for (const t of a.bestRecordConfs) {
-                teams[t.tid].bestRecordConf++;
+                if (teams[t.tid]) {
+                    teams[t.tid].bestRecordConf++;
+                }
             }
-            teams[a.bestRecord.tid].bestRecord++;
+            if (teams[a.bestRecord.tid]) {
+                teams[a.bestRecord.tid].bestRecord++;
+            }
 
             for (let i = 0; i < a.allRookie.length; i++) {
-                teams[a.allRookie[i].tid].allRookie++;
+                if (teams[a.allRookie[i].tid]) {
+                    teams[a.allRookie[i].tid].allRookie++;
+                }
             }
         }
 
@@ -119,13 +147,21 @@ function tallyAwards(awards) {
                 }
             }
         }
-    });
+    }
 
     return teams;
 }
 
 function sumRecordsFor(group, id, name, records) {
-    const except = ['id', 'lastChampionship', 'lastPlayoffAppearance', 'team', 'cid', 'did', 'winp'];
+    const except = [
+        "id",
+        "lastChampionship",
+        "lastPlayoffAppearance",
+        "team",
+        "cid",
+        "did",
+        "winp",
+    ];
     const keys = Object.keys(records[0]);
     const out = {};
 
@@ -140,17 +176,26 @@ function sumRecordsFor(group, id, name, records) {
     }
     out.id = id;
     out.team = name;
-    out.winp = String(out.won / (out.won + out.lost));
-    out.winp = out.won > 0 ? (Number(out.won) / (Number(out.won) + Number(out.lost))).toFixed(3) : '0.000';
+    out.winp =
+        out.won > 0
+            ? helpers.roundWinp(out.won / (out.won + out.lost))
+            : "0.000";
+
+    for (const key of ["lastChampionship", "lastPlayoffAppearance"]) {
+        const years = xRecords
+            .map(r => r[key])
+            .filter(year => typeof year === "number");
+        out[key] = years.length === 0 ? null : Math.max(...years);
+    }
     return out;
 }
 
 async function updateTeamRecords(
-    inputs: {byType: string},
+    inputs: { byType: string },
     updateEvents: UpdateEvents,
     state: any,
-): void | {[key: string]: any} {
-    if (updateEvents.includes('firstRun') || inputs.byType !== state.byType) {
+): void | { [key: string]: any } {
+    if (updateEvents.includes("firstRun") || inputs.byType !== state.byType) {
         const [teams, awards] = await Promise.all([
             idb.getCopies.teamsPlus({
                 attrs: ["tid", "cid", "did", "abbrev", "region", "name"],
@@ -164,24 +209,25 @@ async function updateTeamRecords(
         for (let i = 0; i < teams.length; i++) {
             teamRecords.push(getTeamRecord(teams[i], awardsPerTeam));
         }
-        const seasonCount = teamRecords.map(tr => tr.championships).reduce((a, b) => Number(a) + Number(b));
+        const seasonCount = teamRecords
+            .map(tr => tr.championships)
+            .reduce((a, b) => Number(a) + Number(b));
 
         let display;
-        let displayName;
         if (inputs.byType === "team") {
             display = teamRecords;
-            displayName = "Team";
         } else if (inputs.byType === "conf") {
-            display = g.confs.map(conf => sumRecordsFor('cid', conf.cid, conf.name, teamRecords));
-            displayName = "Conference";
+            display = g.confs.map(conf =>
+                sumRecordsFor("cid", conf.cid, conf.name, teamRecords),
+            );
         } else {
-            display = g.divs.map(div => sumRecordsFor('did', div.did, div.name, teamRecords));
-            displayName = "Division";
+            display = g.divs.map(div =>
+                sumRecordsFor("did", div.did, div.name, teamRecords),
+            );
         }
 
         return {
             teamRecords: display,
-            displayName,
             seasonCount,
             byType: inputs.byType,
         };

@@ -1,11 +1,14 @@
 // @flow
 
-import {g} from '../../common';
+import { local } from ".";
 
-let currentTitle = 'Basketball GM';
+let currentTitle = "Basketball GM";
 const setTitle = (newTitle: string) => {
-    if (g.lid !== undefined) {
-        newTitle += ` - ${g.leagueName}`;
+    if (
+        window.location.pathname.startsWith("/l/") &&
+        local.state.leagueName !== ""
+    ) {
+        newTitle += ` - ${local.state.leagueName}`;
     }
     newTitle = `${newTitle} - Basketball GM`;
     if (newTitle !== currentTitle) {

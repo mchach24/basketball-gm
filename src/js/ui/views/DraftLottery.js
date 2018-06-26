@@ -1,13 +1,12 @@
 // @flow
 
-import classNames from 'classnames';
-import PropTypes from 'prop-types';
-import React from 'react';
-import _ from 'underscore';
-import {g, helpers} from '../../common';
-import {setTitle, toWorker} from '../util';
-import {DraftAbbrev, Dropdown, JumpTo, NewWindowLink} from '../components';
-import type {DraftLotteryResultArray} from '../../common/types';
+import classNames from "classnames";
+import range from "lodash/range";
+import PropTypes from "prop-types";
+import * as React from "react";
+import { helpers, setTitle, toWorker } from "../util";
+import { DraftAbbrev, Dropdown, JumpTo, NewWindowLink } from "../components";
+import type { DraftLotteryResultArray } from "../../common/types";
 
 const getProbs = (result: DraftLotteryResultArray): (number | void)[][] => {
     const probs = [];
@@ -22,16 +21,26 @@ const getProbs = (result: DraftLotteryResultArray): (number | void)[][] => {
         probs[i][2] = 0; // Third pick
         for (let k = 0; k < result.length; k++) {
             if (k !== i) {
-                probs[i][1] += (result[k].chances / 1000) * result[i].chances / (1000 - result[k].chances);
+                probs[i][1] +=
+                    ((result[k].chances / 1000) * result[i].chances) /
+                    (1000 - result[k].chances);
 
                 for (let l = 0; l < result.length; l++) {
                     if (l !== i && l !== k) {
-                        const combosTemp = (result[k].chances / 1000) * (result[l].chances / (1000 - result[k].chances)) * result[i].chances / (1000 - result[k].chances - result[l].chances);
+                        const combosTemp =
+                            ((result[k].chances / 1000) *
+                                (result[l].chances /
+                                    (1000 - result[k].chances)) *
+                                result[i].chances) /
+                            (1000 - result[k].chances - result[l].chances);
                         const topThreeKey = JSON.stringify([i, k, l].sort());
                         if (!topThreeCombos.has(topThreeKey)) {
                             topThreeCombos.set(topThreeKey, combosTemp);
                         } else {
-                            topThreeCombos.set(topThreeKey, topThreeCombos.get(topThreeKey) + combosTemp);
+                            topThreeCombos.set(
+                                topThreeKey,
+                                topThreeCombos.get(topThreeKey) + combosTemp,
+                            );
                         }
 
                         probs[i][2] += combosTemp;
@@ -72,7 +81,8 @@ const getProbs = (result: DraftLotteryResultArray): (number | void)[][] => {
 type Props = {
     result: DraftLotteryResultArray | void,
     season: number,
-    type: 'completed' | 'projected' | 'readyToRun',
+    type: "completed" | "projected" | "readyToRun",
+    userTid: number,
 };
 
 type State = {
@@ -82,10 +92,8 @@ type State = {
     indRevealed: number,
 };
 
-class DraftLottery extends React.Component {
+class DraftLottery extends React.Component<Props, State> {
     componentIsMounted: boolean;
-    props: Props;
-    state: State;
 
     constructor(props: Props) {
         super(props);
@@ -99,21 +107,20 @@ class DraftLottery extends React.Component {
     }
 
     revealPick() {
-        const indRevealed = this.state.indRevealed + 1;
-
         if (!this.componentIsMounted) {
             return;
         }
 
-        this.setState({
-            indRevealed,
-        }, () => {
-            if (this.state.indRevealed < this.state.toReveal.length - 1) {
-                setTimeout(() => {
-                    this.revealPick();
-                }, 1000);
-            }
-        });
+        this.setState(
+            prevState => ({ indRevealed: prevState.indRevealed + 1 }),
+            () => {
+                if (this.state.indRevealed < this.state.toReveal.length - 1) {
+                    setTimeout(() => {
+                        this.revealPick();
+                    }, 1000);
+                }
+            },
+        );
     }
 
     async startLottery() {
@@ -121,7 +128,7 @@ class DraftLottery extends React.Component {
             started: true,
         });
 
-        const result = await toWorker('draftLottery');
+        const result = await toWorker("draftLottery");
 
         const toReveal = [];
         for (let i = 0; i < result.length; i++) {
@@ -131,13 +138,16 @@ class DraftLottery extends React.Component {
         }
         toReveal.reverse();
 
-        this.setState({
-            result,
-            toReveal,
-            indRevealed: -1,
-        }, () => {
-            this.revealPick();
-        });
+        this.setState(
+            {
+                result,
+                toReveal,
+                indRevealed: -1,
+            },
+            () => {
+                this.revealPick();
+            },
+        );
     }
 
     componentDidMount() {
@@ -149,8 +159,11 @@ class DraftLottery extends React.Component {
     }
 
     render() {
-        const {season, type} = this.props;
-        const result = this.state.result !== undefined ? this.state.result : this.props.result;
+        const { season, type, userTid } = this.props;
+        const result =
+            this.state.result !== undefined
+                ? this.state.result
+                : this.props.result;
 
         setTitle(`${season} Draft Lottery`);
 
@@ -159,85 +172,179 @@ class DraftLottery extends React.Component {
         const NUM_PICKS = result !== undefined ? result.length : 14; // I don't think result can ever be undefined, but Flow does
 
         let table;
-        if (result && probs) { // Checking both is redundant, but flow wants it
-            table = <div className="table-responsive">
-                <table className="table table-striped table-bordered table-condensed table-hover">
-                    <thead>
-                        <tr>
-                            <th colSpan="3" />
-                            <th colSpan={NUM_PICKS} className="text-center">Pick Probabilities</th>
-                        </tr>
-                        <tr>
-                            <th>Team</th>
-                            <th>Record</th>
-                            <th>Chances</th>
-                            {result.map((row, i) => <th key={i}>{helpers.ordinal(i + 1)}</th>)}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {result.map(({tid, originalTid, chances, pick, won, lost}, i) => {
-                            const pickCols = _.range(NUM_PICKS).map((j) => {
-                                const prob = probs[i][j];
-                                const pct = prob !== undefined ? `${(prob * 100).toFixed(1)}%` : undefined;
+        if (result && probs) {
+            // Checking both is redundant, but flow wants it
+            table = (
+                <div className="table-responsive">
+                    <table className="table table-striped table-bordered table-condensed table-hover">
+                        <thead>
+                            <tr>
+                                <th colSpan="3" />
+                                <th colSpan={NUM_PICKS} className="text-center">
+                                    Pick Probabilities
+                                </th>
+                            </tr>
+                            <tr>
+                                <th>Team</th>
+                                <th>Record</th>
+                                <th>Chances</th>
+                                {result.map((row, i) => (
+                                    <th key={i}>{helpers.ordinal(i + 1)}</th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {result.map(
+                                (
+                                    {
+                                        tid,
+                                        originalTid,
+                                        chances,
+                                        pick,
+                                        won,
+                                        lost,
+                                    },
+                                    i,
+                                ) => {
+                                    const pickCols = range(NUM_PICKS).map(j => {
+                                        const prob = probs[i][j];
+                                        const pct =
+                                            prob !== undefined
+                                                ? `${(prob * 100).toFixed(1)}%`
+                                                : undefined;
 
-                                let highlighted = false;
-                                if (pick !== undefined) {
-                                    highlighted = pick === j + 1;
-                                } else if (NUM_PICKS - 1 - j <= this.state.indRevealed) { // Has this round been revealed?
-                                    // Is this pick revealed?
-                                    const ind = this.state.toReveal.findIndex(ind2 => ind2 === i);
-                                    if (ind === NUM_PICKS - 1 - j) {
-                                        highlighted = true;
-                                    }
-                                }
+                                        let highlighted = false;
+                                        if (pick !== undefined) {
+                                            highlighted = pick === j + 1;
+                                        } else if (
+                                            NUM_PICKS - 1 - j <=
+                                            this.state.indRevealed
+                                        ) {
+                                            // Has this round been revealed?
+                                            // Is this pick revealed?
+                                            const ind = this.state.toReveal.findIndex(
+                                                ind2 => ind2 === i,
+                                            );
+                                            if (ind === NUM_PICKS - 1 - j) {
+                                                highlighted = true;
+                                            }
+                                        }
 
-                                return <td className={classNames({success: highlighted})} key={j}>{pct}</td>;
-                            });
+                                        return (
+                                            <td
+                                                className={classNames({
+                                                    success: highlighted,
+                                                })}
+                                                key={j}
+                                            >
+                                                {pct}
+                                            </td>
+                                        );
+                                    });
 
-                            const row = <tr key={originalTid}>
-                                <td className={classNames({info: tid === g.userTid})}><DraftAbbrev tid={tid} originalTid={originalTid} season={season} /></td>
-                                <td><a href={helpers.leagueUrl(['standings', season])}>{won}-{lost}</a></td>
-                                <td>{chances}</td>
-                                {pickCols}
-                            </tr>;
-                            return row;
-                        })}
-                    </tbody>
-                </table>
-            </div>;
+                                    const row = (
+                                        <tr key={originalTid}>
+                                            <td
+                                                className={classNames({
+                                                    info: tid === userTid,
+                                                })}
+                                            >
+                                                <DraftAbbrev
+                                                    tid={tid}
+                                                    originalTid={originalTid}
+                                                    season={season}
+                                                />
+                                            </td>
+                                            <td>
+                                                <a
+                                                    href={helpers.leagueUrl([
+                                                        "standings",
+                                                        season,
+                                                    ])}
+                                                >
+                                                    {won}-{lost}
+                                                </a>
+                                            </td>
+                                            <td>{chances}</td>
+                                            {pickCols}
+                                        </tr>
+                                    );
+                                    return row;
+                                },
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            );
         } else {
             table = <p>Can't find draft lottery results for {season}.</p>;
         }
 
-        return <div>
-            <Dropdown view="draft_lottery" fields={["seasons"]} values={[season]} />
-            <JumpTo season={season} />
-            <h1>{season} Draft Lottery <NewWindowLink /></h1>
+        return (
+            <div>
+                <Dropdown
+                    view="draft_lottery"
+                    fields={["seasons"]}
+                    values={[season]}
+                />
+                <JumpTo season={season} />
+                <h1>
+                    {season} Draft Lottery <NewWindowLink />
+                </h1>
 
-            <p>More: <a href={helpers.leagueUrl(['draft_scouting'])}>Future Draft Scouting</a> | <a href={helpers.leagueUrl(['draft_summary', season])}>Draft Summary</a></p>
+                <p>
+                    More:{" "}
+                    <a href={helpers.leagueUrl(["draft_scouting"])}>
+                        Future Draft Scouting
+                    </a>{" "}
+                    |{" "}
+                    <a href={helpers.leagueUrl(["draft_summary", season])}>
+                        Draft Summary
+                    </a>{" "}
+                    |{" "}
+                    <a href={helpers.leagueUrl(["draft_team_history"])}>
+                        Team History
+                    </a>
+                </p>
 
-            {type === 'projected' ? <p>This is what the draft lottery probabilities would be if the lottery was held right now.</p> : null}
+                {type === "projected" ? (
+                    <p>
+                        This is what the draft lottery probabilities would be if
+                        the lottery was held right now.
+                    </p>
+                ) : null}
 
-            {type === 'readyToRun' && !this.state.started ? <p>
-                <button className="btn btn-large btn-success" onClick={() => this.startLottery()}>Start Draft Lottery</button>
-            </p> : null}
+                {type === "readyToRun" && !this.state.started ? (
+                    <p>
+                        <button
+                            className="btn btn-large btn-success"
+                            onClick={() => this.startLottery()}
+                        >
+                            Start Draft Lottery
+                        </button>
+                    </p>
+                ) : null}
 
-            {table}
-        </div>;
+                {table}
+            </div>
+        );
     }
 }
 
 DraftLottery.propTypes = {
-    result: PropTypes.arrayOf(PropTypes.shape({
-        tid: PropTypes.number.isRequired,
-        originalTid: PropTypes.number.isRequired,
-        chances: PropTypes.number.isRequired,
-        pick: PropTypes.number,
-        won: PropTypes.number.isRequired,
-        lost: PropTypes.number.isRequired,
-    })),
+    result: PropTypes.arrayOf(
+        PropTypes.shape({
+            tid: PropTypes.number.isRequired,
+            originalTid: PropTypes.number.isRequired,
+            chances: PropTypes.number.isRequired,
+            pick: PropTypes.number,
+            won: PropTypes.number.isRequired,
+            lost: PropTypes.number.isRequired,
+        }),
+    ),
     season: PropTypes.number.isRequired,
     type: PropTypes.string.isRequired,
+    userTid: PropTypes.number.isRequired,
 };
 
 export default DraftLottery;

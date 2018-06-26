@@ -1,26 +1,16 @@
 // @flow
 
-import {g, PHASE_TEXT} from '../../common';
-import {idb} from '../db';
-import {local, toUI} from '../util';
-import type {Conditions} from '../../common/types';
+import { PHASE_TEXT } from "../../common";
+import { idb } from "../db";
+import { g, local, toUI } from ".";
+import type { Conditions } from "../../common/types";
 
-/*Save phase text to database and push to client.
-
-If no phase text is given, load the last phase text from the database and
-push that to the client.
-
-Pass conditions only if you want to force update a single tab (like beforeView).
-
-Args:
-    phaseText: A string containing the current phase text to be pushed to
-        the client.
-*/
+// Calculate phase text in worker rather than UI, because here we can easily cache it in the meta database
 async function updatePhase(conditions?: Conditions) {
     const phaseText = `${g.season} ${PHASE_TEXT[g.phase]}`;
     if (phaseText !== local.phaseText) {
         local.phaseText = phaseText;
-        toUI(['emit', 'updateTopMenu', {phaseText}]);
+        toUI(["updateLocal", { phaseText }]);
 
         // Update phase in meta database. No need to have this block updating the UI or anything.
         (async () => {
@@ -31,7 +21,7 @@ async function updatePhase(conditions?: Conditions) {
             }
         })();
     } else if (conditions !== undefined) {
-        toUI(['emit', 'updateTopMenu', {phaseText}], conditions);
+        toUI(["updateLocal", { phaseText }], conditions);
     }
 }
 

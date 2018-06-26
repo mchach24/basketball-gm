@@ -1,8 +1,8 @@
 // @flow
 
-import {idb} from '../../db';
-import {mergeByPk} from './helpers';
-import type {EventBBGM} from '../../../common/types';
+import { getAll, idb } from "..";
+import { mergeByPk } from "./helpers";
+import type { EventBBGM } from "../../../common/types";
 
 const getCopies = async ({
     pid,
@@ -17,8 +17,8 @@ const getCopies = async ({
 
     if (season !== undefined) {
         return mergeByPk(
-            await idb.league.events.index('season').getAll(season),
-            (await idb.cache.events.getAll()).filter((event) => {
+            await idb.league.events.index("season").getAll(season),
+            (await idb.cache.events.getAll()).filter(event => {
                 return event.season === season;
             }),
             idb.cache.storeInfos.events.pk,
@@ -27,8 +27,8 @@ const getCopies = async ({
 
     if (pid !== undefined) {
         return mergeByPk(
-            await idb.league.events.index('pids').getAll(pid),
-            (await idb.cache.events.getAll()).filter((event) => {
+            await idb.league.events.index("pids").getAll(pid),
+            (await idb.cache.events.getAll()).filter(event => {
                 return event.pids !== undefined && event.pids.includes(pid);
             }),
             idb.cache.storeInfos.events.pk,
@@ -36,7 +36,7 @@ const getCopies = async ({
     }
 
     return mergeByPk(
-        await idb.league.events.getAll(),
+        await getAll(idb.league.events),
         await idb.cache.events.getAll(),
         idb.cache.storeInfos.events.pk,
     );

@@ -1,10 +1,14 @@
 // @flow
 
 /*eslint camelcase: 0*/
-import {SPORT, fetchWrapper, g} from '../../common';
-import {idb} from '../db';
-import {env, logEvent, toUI} from '../util';
-import type {AchievementKey, Conditions, PartialTopMenu} from '../../common/types';
+import { SPORT, fetchWrapper } from "../../common";
+import { idb } from "../db";
+import { env, g, local, logEvent, toUI } from ".";
+import type {
+    AchievementKey,
+    Conditions,
+    PartialTopMenu,
+} from "../../common/types";
 
 // IF YOU ADD TO THIS you also need to add to the whitelist in add_achievements.php
 const allAchievements: {
@@ -12,59 +16,76 @@ const allAchievements: {
     name: string,
     desc: string,
     count?: number,
-}[] = [{
-    slug: "participation",
-    name: "Participation",
-    desc: "You get an achievement just for creating an account, you special snowflake!",
-}, {
-    slug: "fo_fo_fo",
-    name: "Fo Fo Fo",
-    desc: "Go 16-0 in the playoffs.",
-}, {
-    slug: "septuawinarian",
-    name: "Septuawinarian",
-    desc: "Win 70+ games in the regular season.",
-}, {
-    slug: "98_degrees",
-    name: "98 Degrees",
-    desc: "Go 98-0 in the playoffs and regular season.",
-}, {
-    slug: "dynasty",
-    name: "Dynasty",
-    desc: "Win 6 championships in 8 years.",
-}, {
-    slug: "dynasty_2",
-    name: "Dynasty 2",
-    desc: "Win 8 championships in a row.",
-}, {
-    slug: "dynasty_3",
-    name: "Dynasty 3",
-    desc: "Win 11 championships in 13 years.",
-}, {
-    slug: "moneyball",
-    name: "Moneyball",
-    desc: "Win a title with a payroll under $60 million.",
-}, {
-    slug: "moneyball_2",
-    name: "Moneyball 2",
-    desc: "Win a title with a payroll under $45 million.",
-}, {
-    slug: "hardware_store",
-    name: "Hardware Store",
-    desc: "Players on your team win MVP, DPOY, SMOY, ROY, and Finals MVP in the same season.",
-}, {
-    slug: "small_market",
-    name: "Small Market",
-    desc: "Win a title in a city with under 2 million people.",
-}, {
-    slug: "sleeper_pick",
-    name: "Sleeper Pick",
-    desc: "Use a non-lottery pick to draft the ROY.",
-}, {
-    slug: "hacker",
-    name: "Hacker",
-    desc: 'Privately report a security issue in the account system or some other part of the site.',
-}];
+}[] = [
+    {
+        slug: "participation",
+        name: "Participation",
+        desc:
+            "You get an achievement just for creating an account, you special snowflake!",
+    },
+    {
+        slug: "fo_fo_fo",
+        name: "Fo Fo Fo",
+        desc: "Go 16-0 in the playoffs.",
+    },
+    {
+        slug: "septuawinarian",
+        name: "Septuawinarian",
+        desc: "Win 70+ games in the regular season.",
+    },
+    {
+        slug: "98_degrees",
+        name: "98 Degrees",
+        desc: "Go 98-0 in the playoffs and regular season.",
+    },
+    {
+        slug: "dynasty",
+        name: "Dynasty",
+        desc: "Win 6 championships in 8 years.",
+    },
+    {
+        slug: "dynasty_2",
+        name: "Dynasty 2",
+        desc: "Win 8 championships in a row.",
+    },
+    {
+        slug: "dynasty_3",
+        name: "Dynasty 3",
+        desc: "Win 11 championships in 13 years.",
+    },
+    {
+        slug: "moneyball",
+        name: "Moneyball",
+        desc: "Win a title with a payroll under $60 million.",
+    },
+    {
+        slug: "moneyball_2",
+        name: "Moneyball 2",
+        desc: "Win a title with a payroll under $45 million.",
+    },
+    {
+        slug: "hardware_store",
+        name: "Hardware Store",
+        desc:
+            "Players on your team win MVP, DPOY, SMOY, ROY, and Finals MVP in the same season.",
+    },
+    {
+        slug: "small_market",
+        name: "Small Market",
+        desc: "Win a title in a city with under 2 million people.",
+    },
+    {
+        slug: "sleeper_pick",
+        name: "Sleeper Pick",
+        desc: "Use a non-lottery pick to draft the ROY.",
+    },
+    {
+        slug: "hacker",
+        name: "Hacker",
+        desc:
+            "Privately report a security issue in the account system or some other part of the site.",
+    },
+];
 
 /**
  * Records one or more achievements.
@@ -76,7 +97,11 @@ const allAchievements: {
  * @param {boolean=} silent If true, don't show any notifications (like if achievements are only being moved from IDB to remote). Default false.
  * @return {Promise}
  */
-async function addAchievements(achievements: AchievementKey[], conditions: Conditions, silent?: boolean = false) {
+async function addAchievements(
+    achievements: AchievementKey[],
+    conditions: Conditions,
+    silent?: boolean = false,
+) {
     const notify = slug => {
         if (silent) {
             return;
@@ -85,20 +110,25 @@ async function addAchievements(achievements: AchievementKey[], conditions: Condi
         // Find name of achievement
         for (let i = 0; i < allAchievements.length; i++) {
             if (allAchievements[i].slug === slug) {
-                logEvent({
-                    type: "achievement",
-                    text: `"${allAchievements[i].name}" achievement awarded! <a href="/account">View all achievements.</a>`,
-                    saveToDb: false,
-                }, conditions);
+                logEvent(
+                    {
+                        type: "achievement",
+                        text: `"${
+                            allAchievements[i].name
+                        }" achievement awarded! <a href="/account">View all achievements.</a>`,
+                        saveToDb: false,
+                    },
+                    conditions,
+                );
                 break;
             }
         }
     };
 
     const addToIndexedDB = achievements2 => {
-        return idb.meta.tx('achievements', 'readwrite', (tx) => {
+        return idb.meta.tx("achievements", "readwrite", tx => {
             for (const achievement of achievements2) {
-                tx.achievements.add({slug: achievement});
+                tx.achievements.add({ slug: achievement });
                 notify(achievement);
             }
         });
@@ -107,9 +137,9 @@ async function addAchievements(achievements: AchievementKey[], conditions: Condi
     try {
         const data = await fetchWrapper({
             url: `//account.basketball-gm.${env.tld}/add_achievements.php`,
-            method: 'POST',
-            data: {achievements, sport: SPORT},
-            credentials: 'include',
+            method: "POST",
+            data: { achievements, sport: SPORT },
+            credentials: "include",
         });
 
         if (data.success) {
@@ -126,23 +156,25 @@ async function check(conditions: Conditions): Promise<PartialTopMenu> {
     try {
         const data = await fetchWrapper({
             url: `//account.basketball-gm.${env.tld}/user_info.php`,
-            method: 'GET',
-            data: {sport: SPORT},
-            credentials: 'include',
+            method: "GET",
+            data: { sport: SPORT },
+            credentials: "include",
         });
 
-        const partialTopMenu: PartialTopMenu = {
-            email: data.email,
-            goldCancelled: !!data.gold_cancelled,
-            goldUntil: data.gold_until,
-            username: data.username,
-        };
-        await toUI(['emit', 'updateTopMenu', partialTopMenu]);
+        // Keep track of latest here, for ads
+        local.goldUntil = data.gold_until;
 
-        await toUI(['initAds', data.gold_until]);
+        const currentTimestamp = Math.floor(Date.now() / 1000);
+        await toUI([
+            "updateLocal",
+            {
+                gold: currentTimestamp <= data.gold_until,
+                username: data.username,
+            },
+        ]);
 
         // If user is logged in, upload any locally saved achievements
-        if (data.username !== '' && idb.league !== undefined) {
+        if (data.username !== "" && idb.league !== undefined) {
             // Should be done inside one transaction to eliminate race conditions, but Firefox doesn't like that and the
             // risk is very small.
             let achievements = await idb.league.achievements.getAll();
@@ -155,16 +187,21 @@ async function check(conditions: Conditions): Promise<PartialTopMenu> {
             }
         }
 
-        return partialTopMenu;
+        return {
+            email: data.email,
+            goldCancelled: !!data.gold_cancelled,
+            goldUntil: data.gold_until,
+            username: data.username,
+        };
     } catch (err) {
         // Don't freak out if an AJAX request fails or whatever
         console.log(err);
 
         return {
-            email: '',
+            email: "",
             goldCancelled: false,
             goldUntil: Infinity,
-            username: '',
+            username: "",
         };
     }
 }
@@ -191,15 +228,16 @@ async function getAchievements() {
         // Handle any achievements stored in the cloud
         const achievementsRemote = await fetchWrapper({
             url: `//account.basketball-gm.${env.tld}/get_achievements.php`,
-            method: 'GET',
-            data: {sport: SPORT},
-            credentials: 'include',
+            method: "GET",
+            data: { sport: SPORT },
+            credentials: "include",
         });
 
         // Merge local and remote achievements
         for (let i = 0; i < achievements.length; i++) {
             if (achievementsRemote[achievements[i].slug] !== undefined) {
-                achievements[i].count += achievementsRemote[achievements[i].slug];
+                achievements[i].count +=
+                    achievementsRemote[achievements[i].slug];
             }
         }
 
@@ -215,27 +253,36 @@ async function getAchievements() {
 // HOWEVER, it's only saved to the database if saveAchievement is true (this is the default), but the saving happens asynchronously. It is theoretically possible that this could cause a notification to be displayed to the user about getting an achievement, but some error occurs when saving it.
 const checkAchievement = {};
 
-checkAchievement.fo_fo_fo = async (conditions: Conditions, saveAchievement: boolean = true) => {
-    if (g.godModeInPast) {
+checkAchievement.fo_fo_fo = async (
+    conditions: Conditions,
+    saveAchievement: boolean = true,
+) => {
+    if (g.easyDifficultyInPast || g.godModeInPast) {
         return false;
     }
 
-    const playoffSeries = await idb.getCopy.playoffSeries({season: g.season});
+    const playoffSeries = await idb.getCopy.playoffSeries({ season: g.season });
     if (playoffSeries === undefined) {
         // Should only happen if playoffs are skipped
         return false;
     }
 
-    const series = playoffSeries.series;
-
-    for (let round = 0; round < series.length; round++) {
+    for (const round of playoffSeries.series) {
         let found = false;
-        for (let i = 0; i < series[round].length; i++) {
-            if (series[round][i].away.won === 4 && series[round][i].home.won === 0 && series[round][i].away.tid === g.userTid) {
+        for (const series of round) {
+            if (
+                series.away.won === 4 &&
+                series.home.won === 0 &&
+                series.away.tid === g.userTid
+            ) {
                 found = true;
                 break;
             }
-            if (series[round][i].home.won === 4 && series[round][i].away.won === 0 && series[round][i].home.tid === g.userTid) {
+            if (
+                series.home.won === 4 &&
+                series.away.won === 0 &&
+                series.home.tid === g.userTid
+            ) {
                 found = true;
                 break;
             }
@@ -251,8 +298,11 @@ checkAchievement.fo_fo_fo = async (conditions: Conditions, saveAchievement: bool
     return true;
 };
 
-checkAchievement.septuawinarian = async (conditions: Conditions, saveAchievement: boolean = true) => {
-    if (g.godModeInPast) {
+checkAchievement.septuawinarian = async (
+    conditions: Conditions,
+    saveAchievement: boolean = true,
+) => {
+    if (g.easyDifficultyInPast || g.godModeInPast) {
         return false;
     }
 
@@ -272,8 +322,11 @@ checkAchievement.septuawinarian = async (conditions: Conditions, saveAchievement
     return false;
 };
 
-checkAchievement["98_degrees"] = async (conditions: Conditions, saveAchievement: boolean = true) => {
-    if (g.godModeInPast) {
+checkAchievement["98_degrees"] = async (
+    conditions: Conditions,
+    saveAchievement: boolean = true,
+) => {
+    if (g.easyDifficultyInPast || g.godModeInPast) {
         return false;
     }
 
@@ -284,7 +337,12 @@ checkAchievement["98_degrees"] = async (conditions: Conditions, saveAchievement:
             season: g.season,
             tid: g.userTid,
         });
-        if (t && t.seasonAttrs && t.seasonAttrs.won === 82 && t.seasonAttrs.lost === 0) {
+        if (
+            t &&
+            t.seasonAttrs &&
+            t.seasonAttrs.won === 82 &&
+            t.seasonAttrs.lost === 0
+        ) {
             if (saveAchievement) {
                 addAchievements(["98_degrees"], conditions);
             }
@@ -295,12 +353,18 @@ checkAchievement["98_degrees"] = async (conditions: Conditions, saveAchievement:
     return false;
 };
 
-async function checkDynasty(titles: number, years: number, slug: AchievementKey, conditions: Conditions, saveAchievement: boolean): Promise<boolean> {
-    if (g.godModeInPast) {
+async function checkDynasty(
+    titles: number,
+    years: number,
+    slug: AchievementKey,
+    conditions: Conditions,
+    saveAchievement: boolean,
+): Promise<boolean> {
+    if (g.easyDifficultyInPast || g.godModeInPast) {
         return false;
     }
 
-    const teamSeasons = await idb.getCopies.teamSeasons({tid: g.userTid});
+    const teamSeasons = await idb.getCopies.teamSeasons({ tid: g.userTid });
 
     let titlesFound = 0;
     // Look over past years
@@ -311,7 +375,10 @@ async function checkDynasty(titles: number, years: number, slug: AchievementKey,
         }
 
         // Won title?
-        if (teamSeasons[teamSeasons.length - 1 - i].playoffRoundsWon === g.numPlayoffRounds) {
+        if (
+            teamSeasons[teamSeasons.length - 1 - i].playoffRoundsWon ===
+            g.numPlayoffRounds
+        ) {
             titlesFound += 1;
         }
     }
@@ -326,12 +393,26 @@ async function checkDynasty(titles: number, years: number, slug: AchievementKey,
     return false;
 }
 
-checkAchievement.dynasty = (conditions: Conditions, saveAchievement: boolean = true) => checkDynasty(6, 8, "dynasty", conditions, saveAchievement);
-checkAchievement.dynasty_2 = (conditions: Conditions, saveAchievement: boolean = true) => checkDynasty(8, 8, "dynasty_2", conditions, saveAchievement);
-checkAchievement.dynasty_3 = (conditions: Conditions, saveAchievement: boolean = true) => checkDynasty(11, 13, "dynasty_3", conditions, saveAchievement);
+checkAchievement.dynasty = (
+    conditions: Conditions,
+    saveAchievement: boolean = true,
+) => checkDynasty(6, 8, "dynasty", conditions, saveAchievement);
+checkAchievement.dynasty_2 = (
+    conditions: Conditions,
+    saveAchievement: boolean = true,
+) => checkDynasty(8, 8, "dynasty_2", conditions, saveAchievement);
+checkAchievement.dynasty_3 = (
+    conditions: Conditions,
+    saveAchievement: boolean = true,
+) => checkDynasty(11, 13, "dynasty_3", conditions, saveAchievement);
 
-async function checkMoneyball(maxPayroll, slug, conditions: Conditions, saveAchievement) {
-    if (g.godModeInPast) {
+async function checkMoneyball(
+    maxPayroll,
+    slug,
+    conditions: Conditions,
+    saveAchievement,
+) {
+    if (g.easyDifficultyInPast || g.godModeInPast) {
         return false;
     }
     const t = await idb.getCopy.teamsPlus({
@@ -340,7 +421,12 @@ async function checkMoneyball(maxPayroll, slug, conditions: Conditions, saveAchi
         tid: g.userTid,
     });
 
-    if (t && t.seasonAttrs && t.seasonAttrs.playoffRoundsWon === g.numPlayoffRounds && t.seasonAttrs.expenses.salary.amount <= maxPayroll) {
+    if (
+        t &&
+        t.seasonAttrs &&
+        t.seasonAttrs.playoffRoundsWon === g.numPlayoffRounds &&
+        t.seasonAttrs.expenses.salary.amount <= maxPayroll
+    ) {
         if (saveAchievement) {
             addAchievements([slug], conditions);
         }
@@ -350,18 +436,39 @@ async function checkMoneyball(maxPayroll, slug, conditions: Conditions, saveAchi
     return false;
 }
 
-checkAchievement.moneyball = (conditions: Conditions, saveAchievement: boolean = true) => checkMoneyball(60000, "moneyball", conditions, saveAchievement);
+checkAchievement.moneyball = (
+    conditions: Conditions,
+    saveAchievement: boolean = true,
+) => checkMoneyball(60000, "moneyball", conditions, saveAchievement);
 
-checkAchievement.moneyball_2 = (conditions: Conditions, saveAchievement: boolean = true) => checkMoneyball(45000, "moneyball_2", conditions, saveAchievement);
+checkAchievement.moneyball_2 = (
+    conditions: Conditions,
+    saveAchievement: boolean = true,
+) => checkMoneyball(45000, "moneyball_2", conditions, saveAchievement);
 
-checkAchievement.hardware_store = async (conditions: Conditions, saveAchievement: boolean = true) => {
-    if (g.godModeInPast) {
+checkAchievement.hardware_store = async (
+    conditions: Conditions,
+    saveAchievement: boolean = true,
+) => {
+    if (g.easyDifficultyInPast || g.godModeInPast) {
         return false;
     }
 
-    const awards = await idb.getCopy.awards({season: g.season});
+    const awards = await idb.getCopy.awards({ season: g.season });
 
-    if (awards !== undefined && awards.mvp.tid === g.userTid && awards.dpoy.tid === g.userTid && awards.smoy.tid === g.userTid && awards.roy.tid === g.userTid && awards.finalsMvp.tid === g.userTid) {
+    if (
+        awards &&
+        awards.mvp &&
+        awards.dpoy &&
+        awards.smoy &&
+        awards.roy &&
+        awards.finalsMvp &&
+        awards.mvp.tid === g.userTid &&
+        awards.dpoy.tid === g.userTid &&
+        awards.smoy.tid === g.userTid &&
+        awards.roy.tid === g.userTid &&
+        awards.finalsMvp.tid === g.userTid
+    ) {
         if (saveAchievement) {
             addAchievements(["hardware_store"], conditions);
         }
@@ -371,8 +478,11 @@ checkAchievement.hardware_store = async (conditions: Conditions, saveAchievement
     return false;
 };
 
-checkAchievement.small_market = async (conditions: Conditions, saveAchievement: boolean = true) => {
-    if (g.godModeInPast) {
+checkAchievement.small_market = async (
+    conditions: Conditions,
+    saveAchievement: boolean = true,
+) => {
+    if (g.easyDifficultyInPast || g.godModeInPast) {
         return false;
     }
 
@@ -382,7 +492,12 @@ checkAchievement.small_market = async (conditions: Conditions, saveAchievement: 
         tid: g.userTid,
     });
 
-    if (t && t.seasonAttrs && t.seasonAttrs.playoffRoundsWon === g.numPlayoffRounds && t.seasonAttrs.pop <= 2) {
+    if (
+        t &&
+        t.seasonAttrs &&
+        t.seasonAttrs.playoffRoundsWon === g.numPlayoffRounds &&
+        t.seasonAttrs.pop <= 2
+    ) {
         if (saveAchievement) {
             addAchievements(["small_market"], conditions);
         }
@@ -392,15 +507,23 @@ checkAchievement.small_market = async (conditions: Conditions, saveAchievement: 
     return false;
 };
 
-checkAchievement.sleeper_pick = async (conditions: Conditions, saveAchievement: boolean = true) => {
-    if (g.godModeInPast) {
+checkAchievement.sleeper_pick = async (
+    conditions: Conditions,
+    saveAchievement: boolean = true,
+) => {
+    if (g.easyDifficultyInPast || g.godModeInPast) {
         return false;
     }
 
-    const awards = await idb.getCopy.awards({season: g.season});
+    const awards = await idb.getCopy.awards({ season: g.season });
     if (awards && awards.roy && awards.roy.tid === g.userTid) {
         const p = await idb.cache.players.get(awards.roy.pid);
-        if (p.tid === g.userTid && p.draft.tid === g.userTid && p.draft.year === g.season - 1 && (p.draft.round > 1 || p.draft.pick >= 15)) {
+        if (
+            p.tid === g.userTid &&
+            p.draft.tid === g.userTid &&
+            p.draft.year === g.season - 1 &&
+            (p.draft.round > 1 || p.draft.pick >= 15)
+        ) {
             if (saveAchievement) {
                 addAchievements(["sleeper_pick"], conditions);
             }

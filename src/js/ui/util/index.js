@@ -1,28 +1,39 @@
 // @flow
+/* global process */
 
-import PromiseWorker from 'promise-worker-bi';
-const worker = window.useSharedWorker ? new SharedWorker('/gen/worker.js') : new Worker('/gen/worker.js');
+import PromiseWorker from "promise-worker-bi";
+
+const workerPath =
+    process.env.NODE_ENV === "production"
+        ? `/gen/worker-${window.bbgmVersion}.js`
+        : "/gen/worker.js";
+const worker = window.useSharedWorker
+    ? new SharedWorker(workerPath)
+    : new Worker(workerPath);
+
 export const promiseWorker = new PromiseWorker(worker);
-promiseWorker.registerError((e) => {
+promiseWorker.registerError(e => {
     if (window.Bugsnag) {
-        window.Bugsnag.notifyException(new Error(e.message), 'ErrorInWorker', {
-            colno: e.colno,
-            lineno: e.lineno,
-            groupingHash: JSON.stringify([e.message, e.colno, e.lineno]),
-        });
+        window.Bugsnag.notifyException(e);
     }
-    console.error('Error from worker:');
+    console.error("Error from worker:");
     console.error(e);
 });
 
-export {default as ads} from './ads';
-export {default as emitter} from './emitter';
-export {default as genStaticPage} from './genStaticPage';
-export {default as getCols} from './getCols';
-export {default as getScript} from './getScript';
-export {default as initView} from './initView';
-export {default as logEvent} from './logEvent';
-export {default as notify} from './notify';
-export {default as realtimeUpdate} from './realtimeUpdate';
-export {default as setTitle} from './setTitle';
-export {default as toWorker} from './toWorker';
+export { default as ads } from "./ads";
+export { default as compareVersions } from "./compareVersions";
+export { default as emitter } from "./emitter";
+export { default as genStaticPage } from "./genStaticPage";
+export { default as getCols } from "./getCols";
+export { default as getScript } from "./getScript";
+export { default as helpers } from "./helpers";
+export { default as initView } from "./initView";
+export { default as leagueNotFoundMessage } from "./leagueNotFoundMessage";
+export { default as local } from "./local";
+export { default as logEvent } from "./logEvent";
+export { default as notify } from "./notify";
+export { default as prefixStatOpp } from "./prefixStatOpp";
+export { default as realtimeUpdate } from "./realtimeUpdate";
+export { default as setTitle } from "./setTitle";
+export { default as subscribeLocal } from "./subscribeLocal";
+export { default as toWorker } from "./toWorker";
